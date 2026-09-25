@@ -16,8 +16,6 @@ partial class MainCropperForm
     private IconPictureBox picAppLogo = null!;
     private Label lblAppTitle = null!;
     private IconButton btnProject = null!;
-    private IconButton btnOpenFile = null!;
-    private IconButton btnPasteClipboard = null!;
     private IconButton btnLiveCapture = null!;
     private IconButton btnWindowCapture = null!;
     private IconButton btnFitView = null!;
@@ -27,8 +25,10 @@ partial class MainCropperForm
     private IconButton btnSaveProject = null!;
 
     // Body Panels
-    private SplitContainer splitMain = null!;
-    private SplitContainer splitTop = null!;
+    private LiveSplitContainer splitMain = null!;
+    private LiveSplitContainer splitTop = null!;
+    private LiveSplitContainer splitMediaCanvas = null!;
+    private MediaPanelControl mediaPanel = null!;
 
     // Left Panel (Canvas)
     private Panel pnlCanvasContainer = null!;
@@ -85,7 +85,7 @@ partial class MainCropperForm
     private Button btnRes2560x1440 = null!;
     private Button btnRes1440x900 = null!;
     private Button btnRes1024x768 = null!;
-    private Button btnRes800x600 = null!;
+    private Button btnResAll = null!;
 
     private TableLayoutPanel tlpRatios = null!;
     private TableLayoutPanel tlpScreenSizes = null!;
@@ -223,14 +223,6 @@ partial class MainCropperForm
         btnProject.Click += (s, e) => ShowProjectDialog();
         pnlHeaderButtons.Controls.Add(btnProject);
 
-        btnOpenFile = CreateHeaderButton("Nạp ảnh", IconChar.FolderOpen);
-        btnOpenFile.Click += (s, e) => OpenImageFromFile();
-        pnlHeaderButtons.Controls.Add(btnOpenFile);
-
-        btnPasteClipboard = CreateHeaderButton("Dán (Ctrl+V)", IconChar.Paste);
-        btnPasteClipboard.Click += (s, e) => PasteFromClipboard();
-        pnlHeaderButtons.Controls.Add(btnPasteClipboard);
-
         btnLiveCapture = CreateHeaderButton("Chụp Live (F9)", IconChar.Camera, Color.FromArgb(0, 168, 150));
         btnLiveCapture.Click += async (s, e) => await TriggerLiveCaptureAsync();
         pnlHeaderButtons.Controls.Add(btnLiveCapture);
@@ -266,7 +258,7 @@ partial class MainCropperForm
         // -------------------------------------------------------------
         // Body Container: splitMain (Top vs Bottom)
         // -------------------------------------------------------------
-        splitMain = new SplitContainer
+        splitMain = new LiveSplitContainer
         {
             Dock = DockStyle.Fill,
             Orientation = Orientation.Horizontal,
@@ -304,14 +296,14 @@ partial class MainCropperForm
         // -------------------------------------------------------------
         // Top Panel: splitTop (Left Canvas vs Right Properties)
         // -------------------------------------------------------------
-        splitTop = new SplitContainer
+        splitTop = new LiveSplitContainer
         {
             Dock = DockStyle.Fill,
             Orientation = Orientation.Vertical,
             SplitterWidth = 6,
             BackColor = Color.FromArgb(56, 61, 74),
             Size = new Size(DpiScale(1400), DpiScale(530)),
-            Panel1MinSize = DpiScale(250),
+            Panel1MinSize = DpiScale(500),
             Panel2MinSize = DpiScale(360),
             FixedPanel = FixedPanel.Panel2,
             SplitterDistance = DpiScale(1030)
@@ -454,9 +446,28 @@ partial class MainCropperForm
         pnlCanvasContainer.Controls.Add(pnlCanvasHeader);
 
         lblImageInfo = new Label { Visible = false };
-        canvas.ImageOverlayInfo = "Chưa nạp ảnh";
+        canvas.ImageOverlayInfo = "Chưa nạp ảnh (Kéo & thả ảnh vào đây)";
 
-        splitTop.Panel1.Controls.Add(pnlCanvasContainer);
+        splitMediaCanvas = new LiveSplitContainer
+        {
+            Dock = DockStyle.Fill,
+            Orientation = Orientation.Vertical,
+            SplitterWidth = 6,
+            BackColor = Color.FromArgb(56, 61, 74),
+            Size = new Size(DpiScale(1030), DpiScale(530)),
+            Panel1MinSize = DpiScale(180),
+            Panel2MinSize = DpiScale(200),
+            FixedPanel = FixedPanel.Panel1,
+            SplitterDistance = DpiScale(350)
+        };
+        splitTop.Panel1.Controls.Add(splitMediaCanvas);
+
+        mediaPanel = new MediaPanelControl(_dpiScale)
+        {
+            Dock = DockStyle.Fill
+        };
+        splitMediaCanvas.Panel1.Controls.Add(mediaPanel);
+        splitMediaCanvas.Panel2.Controls.Add(pnlCanvasContainer);
 
         // Right Panel: Properties & Adjustments (replacing Preview)
         pnlPropertiesContainer = new Panel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(32, 35, 42) };
@@ -694,10 +705,10 @@ partial class MainCropperForm
         tlpRatios.RowStyles.Add(new RowStyle(SizeType.Absolute, DpiScale(28)));
         tlpRatios.RowStyles.Add(new RowStyle(SizeType.Absolute, DpiScale(28)));
 
-        // Section 1 Row 1: 1:1, 3:4, 4:6, 9:16
-        btnRatio1x1 = CreatePresetButton("1:1");
-        btnRatio1x1.Click += (s, e) => ApplyAspectRatio(1, 1, btnRatio1x1);
-        tlpRatios.Controls.Add(btnRatio1x1, 0, 0);
+        // Section 1 Row 1: Tự do, 3:4, 4:6, 9:16
+        btnRatioFree = CreatePresetButton("Tự do");
+        btnRatioFree.Click += (s, e) => ApplyAspectRatio(0, 0, btnRatioFree);
+        tlpRatios.Controls.Add(btnRatioFree, 0, 0);
 
         btnRatio3x4 = CreatePresetButton("3:4");
         btnRatio3x4.Click += (s, e) => ApplyAspectRatio(3, 4, btnRatio3x4);
@@ -711,10 +722,10 @@ partial class MainCropperForm
         btnRatio9x16.Click += (s, e) => ApplyAspectRatio(9, 16, btnRatio9x16);
         tlpRatios.Controls.Add(btnRatio9x16, 3, 0);
 
-        // Section 1 Row 2: Tự do, 4:3, 6:4, 16:9
-        btnRatioFree = CreatePresetButton("Tự do");
-        btnRatioFree.Click += (s, e) => ApplyAspectRatio(0, 0, btnRatioFree);
-        tlpRatios.Controls.Add(btnRatioFree, 0, 1);
+        // Section 1 Row 2: 1:1, 4:3, 6:4, 16:9
+        btnRatio1x1 = CreatePresetButton("1:1");
+        btnRatio1x1.Click += (s, e) => ApplyAspectRatio(1, 1, btnRatio1x1);
+        tlpRatios.Controls.Add(btnRatio1x1, 0, 1);
 
         btnRatio4x3 = CreatePresetButton("4:3");
         btnRatio4x3.Click += (s, e) => ApplyAspectRatio(4, 3, btnRatio4x3);
@@ -756,39 +767,39 @@ partial class MainCropperForm
         tlpScreenSizes.RowStyles.Add(new RowStyle(SizeType.Absolute, DpiScale(28)));
         tlpScreenSizes.RowStyles.Add(new RowStyle(SizeType.Absolute, DpiScale(28)));
 
-        // Section 2 Row 1
-        btnRes1920x1080 = CreatePresetButton("1920x1080");
-        btnRes1920x1080.Click += (s, e) => ApplyScreenResolution(1920, 1080);
-        tlpScreenSizes.Controls.Add(btnRes1920x1080, 0, 0);
-
-        btnRes1600x900 = CreatePresetButton("1600x900");
-        btnRes1600x900.Click += (s, e) => ApplyScreenResolution(1600, 900);
-        tlpScreenSizes.Controls.Add(btnRes1600x900, 1, 0);
-
-        btnRes1366x768 = CreatePresetButton("1366x768");
-        btnRes1366x768.Click += (s, e) => ApplyScreenResolution(1366, 768);
-        tlpScreenSizes.Controls.Add(btnRes1366x768, 2, 0);
-
-        btnRes1280x720 = CreatePresetButton("1280x720");
-        btnRes1280x720.Click += (s, e) => ApplyScreenResolution(1280, 720);
-        tlpScreenSizes.Controls.Add(btnRes1280x720, 3, 0);
-
-        // Section 2 Row 2
-        btnRes2560x1440 = CreatePresetButton("2560x1440");
-        btnRes2560x1440.Click += (s, e) => ApplyScreenResolution(2560, 1440);
-        tlpScreenSizes.Controls.Add(btnRes2560x1440, 0, 1);
-
-        btnRes1440x900 = CreatePresetButton("1440x900");
-        btnRes1440x900.Click += (s, e) => ApplyScreenResolution(1440, 900);
-        tlpScreenSizes.Controls.Add(btnRes1440x900, 1, 1);
+        // Section 2 Row 1 (Col 0..3): Toàn bộ, 1024x768, 1280x720, 1366x768
+        btnResAll = CreatePresetButton("Toàn bộ");
+        btnResAll.Click += (s, e) => ApplyFullImageResolution();
+        tlpScreenSizes.Controls.Add(btnResAll, 0, 0);
 
         btnRes1024x768 = CreatePresetButton("1024x768");
         btnRes1024x768.Click += (s, e) => ApplyScreenResolution(1024, 768);
-        tlpScreenSizes.Controls.Add(btnRes1024x768, 2, 1);
+        tlpScreenSizes.Controls.Add(btnRes1024x768, 1, 0);
 
-        btnRes800x600 = CreatePresetButton("800x600");
-        btnRes800x600.Click += (s, e) => ApplyScreenResolution(800, 600);
-        tlpScreenSizes.Controls.Add(btnRes800x600, 3, 1);
+        btnRes1280x720 = CreatePresetButton("1280x720");
+        btnRes1280x720.Click += (s, e) => ApplyScreenResolution(1280, 720);
+        tlpScreenSizes.Controls.Add(btnRes1280x720, 2, 0);
+
+        btnRes1366x768 = CreatePresetButton("1366x768");
+        btnRes1366x768.Click += (s, e) => ApplyScreenResolution(1366, 768);
+        tlpScreenSizes.Controls.Add(btnRes1366x768, 3, 0);
+
+        // Section 2 Row 2 (Col 0..3): 1440x900, 1600x900, 1920x1080, 2560x1440
+        btnRes1440x900 = CreatePresetButton("1440x900");
+        btnRes1440x900.Click += (s, e) => ApplyScreenResolution(1440, 900);
+        tlpScreenSizes.Controls.Add(btnRes1440x900, 0, 1);
+
+        btnRes1600x900 = CreatePresetButton("1600x900");
+        btnRes1600x900.Click += (s, e) => ApplyScreenResolution(1600, 900);
+        tlpScreenSizes.Controls.Add(btnRes1600x900, 1, 1);
+
+        btnRes1920x1080 = CreatePresetButton("1920x1080");
+        btnRes1920x1080.Click += (s, e) => ApplyScreenResolution(1920, 1080);
+        tlpScreenSizes.Controls.Add(btnRes1920x1080, 2, 1);
+
+        btnRes2560x1440 = CreatePresetButton("2560x1440");
+        btnRes2560x1440.Click += (s, e) => ApplyScreenResolution(2560, 1440);
+        tlpScreenSizes.Controls.Add(btnRes2560x1440, 3, 1);
 
         // Stack controls in cardRatioAndSize (reverse order for Dock = Top)
         cardRatioAndSize.Controls.Add(tlpScreenSizes);
@@ -832,9 +843,9 @@ partial class MainCropperForm
             BackColor = Color.Transparent,
             Margin = new Padding(0, DpiScale(2), 0, 0)
         };
-        tlpCoords.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, DpiScale(26)));
+        tlpCoords.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         tlpCoords.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
-        tlpCoords.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, DpiScale(26)));
+        tlpCoords.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         tlpCoords.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
         tlpCoords.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         tlpCoords.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -889,6 +900,7 @@ partial class MainCropperForm
         numH.ValueChanged += (s, e) => OnNumericInputChanged();
         tlpCoords.Controls.Add(numH, 3, 1);
 
+        // Row 1: Directional arrow pad + Center button
         FlowLayoutPanel rowNudgeControls = new()
         {
             Dock = DockStyle.Top,
@@ -897,60 +909,72 @@ partial class MainCropperForm
             WrapContents = false,
             BackColor = Color.Transparent,
             Margin = Padding.Empty,
-            Padding = new Padding(0, DpiScale(6), 0, 0)
+            Padding = new Padding(0, DpiScale(6), 0, DpiScale(4))
         };
 
-        btnNudgeLeft = CreateToolButton(IconChar.ArrowLeft, 0, 0, DpiScale(30), DpiScale(28));
-        btnNudgeLeft.Margin = new Padding(0, 0, DpiScale(2), 0);
+        btnNudgeLeft = CreateToolButton(IconChar.ArrowLeft, 0, 0, DpiScale(28), DpiScale(28));
+        btnNudgeLeft.Margin = new Padding(0, 0, DpiScale(3), 0);
         btnNudgeLeft.Click += (s, e) => NudgeCrop(-GetNudgeStep(), 0);
         tipActions.SetToolTip(btnNudgeLeft, "Di chuyển sang trái (Mũi tên Trái)");
         rowNudgeControls.Controls.Add(btnNudgeLeft);
 
-        btnNudgeUp = CreateToolButton(IconChar.ArrowUp, 0, 0, DpiScale(30), DpiScale(28));
-        btnNudgeUp.Margin = new Padding(0, 0, DpiScale(2), 0);
+        btnNudgeUp = CreateToolButton(IconChar.ArrowUp, 0, 0, DpiScale(28), DpiScale(28));
+        btnNudgeUp.Margin = new Padding(0, 0, DpiScale(3), 0);
         btnNudgeUp.Click += (s, e) => NudgeCrop(0, -GetNudgeStep());
         tipActions.SetToolTip(btnNudgeUp, "Di chuyển lên trên (Mũi tên Lên)");
         rowNudgeControls.Controls.Add(btnNudgeUp);
 
-        btnNudgeDown = CreateToolButton(IconChar.ArrowDown, 0, 0, DpiScale(30), DpiScale(28));
-        btnNudgeDown.Margin = new Padding(0, 0, DpiScale(2), 0);
+        btnNudgeDown = CreateToolButton(IconChar.ArrowDown, 0, 0, DpiScale(28), DpiScale(28));
+        btnNudgeDown.Margin = new Padding(0, 0, DpiScale(3), 0);
         btnNudgeDown.Click += (s, e) => NudgeCrop(0, GetNudgeStep());
         tipActions.SetToolTip(btnNudgeDown, "Di chuyển xuống dưới (Mũi tên Xuống)");
         rowNudgeControls.Controls.Add(btnNudgeDown);
 
-        btnNudgeRight = CreateToolButton(IconChar.ArrowRight, 0, 0, DpiScale(30), DpiScale(28));
-        btnNudgeRight.Margin = new Padding(0, 0, DpiScale(4), 0);
+        btnNudgeRight = CreateToolButton(IconChar.ArrowRight, 0, 0, DpiScale(28), DpiScale(28));
+        btnNudgeRight.Margin = new Padding(0, 0, DpiScale(10), 0);
         btnNudgeRight.Click += (s, e) => NudgeCrop(GetNudgeStep(), 0);
         tipActions.SetToolTip(btnNudgeRight, "Di chuyển sang phải (Mũi tên Phải)");
         rowNudgeControls.Controls.Add(btnNudgeRight);
 
-        btnCenterBox = CreateCenterButton("Căn giữa", IconChar.Bullseye, 0, 0, DpiScale(90), DpiScale(28));
-        btnCenterBox.Margin = new Padding(0, 0, DpiScale(6), 0);
+        btnCenterBox = CreateCenterButton("Căn giữa", IconChar.Bullseye, 0, 0, DpiScale(100), DpiScale(28));
+        btnCenterBox.Margin = Padding.Empty;
         btnCenterBox.Click += (s, e) => CenterCropBox();
         tipActions.SetToolTip(btnCenterBox, "Căn giữa vùng chọn vào khung ảnh");
         rowNudgeControls.Controls.Add(btnCenterBox);
 
+        // Row 2: Nudge step setting
+        FlowLayoutPanel rowStepControls = new()
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
+            BackColor = Color.Transparent,
+            Margin = Padding.Empty,
+            Padding = new Padding(0, 0, 0, DpiScale(4))
+        };
+
         Label lblStep = new()
         {
-            Text = "Bước:",
-            Font = new Font("Segoe UI", 9F),
-            ForeColor = Color.White,
+            Text = "Bước di chuyển:",
+            Font = new Font("Segoe UI", 8.5F),
+            ForeColor = Color.FromArgb(170, 185, 205),
             AutoSize = true,
-            Margin = new Padding(DpiScale(2), DpiScale(5), DpiScale(2), 0)
+            Margin = new Padding(0, DpiScale(4), DpiScale(6), 0)
         };
-        rowNudgeControls.Controls.Add(lblStep);
+        rowStepControls.Controls.Add(lblStep);
 
         cboNudgeStep = new ComboBox
         {
-            Width = DpiScale(62),
+            Width = DpiScale(75),
             DropDownStyle = ComboBoxStyle.DropDownList,
             FlatStyle = FlatStyle.Flat,
             DrawMode = DrawMode.OwnerDrawFixed,
-            ItemHeight = DpiScale(20),
+            ItemHeight = DpiScale(18),
             BackColor = Color.FromArgb(50, 55, 68),
             ForeColor = Color.White,
-            Font = new Font("Segoe UI Semibold", 9F),
-            Margin = new Padding(0, DpiScale(1), 0, 0)
+            Font = new Font("Segoe UI Semibold", 8.5F),
+            Margin = Padding.Empty
         };
         cboNudgeStep.Items.AddRange(["1px", "5px", "10px", "50px"]);
         cboNudgeStep.SelectedIndex = 1;
@@ -963,9 +987,10 @@ partial class MainCropperForm
             StringFormat sf = new() { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
             e.Graphics.DrawString(cboNudgeStep.Items[e.Index]?.ToString() ?? "", cboNudgeStep.Font, fg, e.Bounds, sf);
         };
-        rowNudgeControls.Controls.Add(cboNudgeStep);
+        rowStepControls.Controls.Add(cboNudgeStep);
 
         // Stack controls in cardCoords (reverse order for Dock = Top)
+        cardCoords.Controls.Add(rowStepControls);
         cardCoords.Controls.Add(rowNudgeControls);
         cardCoords.Controls.Add(tlpCoords);
         cardCoords.Controls.Add(lblCoordsTitle);
@@ -995,9 +1020,9 @@ partial class MainCropperForm
 
         lblSavedTitle = new Label
         {
-            Text = "OBJECT: 0 mục",
+            Text = "Objects (0)",
             UseMnemonic = false,
-            Font = new Font("Segoe UI Bold", 9F),
+            Font = new Font("Segoe UI Semibold", 9F),
             ForeColor = Color.White,
             Location = new Point(picSavedIcon.Right + DpiScale(8), DpiScale(9)),
             AutoSize = true
@@ -1051,7 +1076,8 @@ partial class MainCropperForm
             AllowUserToResizeRows = false,
             MultiSelect = false,
             SelectionMode = DataGridViewSelectionMode.FullRowSelect,
-            ReadOnly = true,
+            ReadOnly = false,
+            EditMode = DataGridViewEditMode.EditProgrammatically,
             AutoGenerateColumns = false,
             ShowCellToolTips = true,
             Font = new Font("Segoe UI", 9F)
@@ -1074,43 +1100,43 @@ partial class MainCropperForm
         dgvSavedRegions.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(38, 42, 52);
 
         // Columns definition with clear titles and alignment
-        var colIdx = new DataGridViewTextBoxColumn { Name = "ColIndex", HeaderText = "#", Width = DpiScale(42) };
+        var colIdx = new DataGridViewTextBoxColumn { Name = "ColIndex", HeaderText = "#", Width = DpiScale(42), ReadOnly = true };
         colIdx.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
         dgvSavedRegions.Columns.Add(colIdx);
 
-        var colType = new DataGridViewTextBoxColumn { Name = "ColType", HeaderText = "Loại", Width = DpiScale(50) };
+        var colType = new DataGridViewTextBoxColumn { Name = "ColType", HeaderText = "Loại", Width = DpiScale(50), ReadOnly = true };
         colType.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
         dgvSavedRegions.Columns.Add(colType);
 
-        var colName = new DataGridViewTextBoxColumn { Name = "ColName", HeaderText = "Tên vùng / ảnh", Width = DpiScale(175) };
+        var colName = new DataGridViewTextBoxColumn { Name = "ColName", HeaderText = "Tên vùng / ảnh", Width = DpiScale(175), ReadOnly = false };
         colName.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleLeft;
         dgvSavedRegions.Columns.Add(colName);
 
-        var colX = new DataGridViewTextBoxColumn { Name = "ColX", HeaderText = "Tọa độ X", Width = DpiScale(75) };
+        var colX = new DataGridViewTextBoxColumn { Name = "ColX", HeaderText = "Tọa độ X", Width = DpiScale(75), ReadOnly = true };
         colX.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
         dgvSavedRegions.Columns.Add(colX);
 
-        var colY = new DataGridViewTextBoxColumn { Name = "ColY", HeaderText = "Tọa độ Y", Width = DpiScale(75) };
+        var colY = new DataGridViewTextBoxColumn { Name = "ColY", HeaderText = "Tọa độ Y", Width = DpiScale(75), ReadOnly = true };
         colY.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
         dgvSavedRegions.Columns.Add(colY);
 
-        var colW = new DataGridViewTextBoxColumn { Name = "ColW", HeaderText = "Rộng (W)", Width = DpiScale(80) };
+        var colW = new DataGridViewTextBoxColumn { Name = "ColW", HeaderText = "Rộng (W)", Width = DpiScale(80), ReadOnly = true };
         colW.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
         dgvSavedRegions.Columns.Add(colW);
 
-        var colH = new DataGridViewTextBoxColumn { Name = "ColH", HeaderText = "Cao (H)", Width = DpiScale(80) };
+        var colH = new DataGridViewTextBoxColumn { Name = "ColH", HeaderText = "Cao (H)", Width = DpiScale(80), ReadOnly = true };
         colH.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
         dgvSavedRegions.Columns.Add(colH);
 
-        var colRatio = new DataGridViewTextBoxColumn { Name = "ColRatio", HeaderText = "Tỉ lệ", Width = DpiScale(75) };
+        var colRatio = new DataGridViewTextBoxColumn { Name = "ColRatio", HeaderText = "Tỉ lệ", Width = DpiScale(75), ReadOnly = true };
         colRatio.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
         dgvSavedRegions.Columns.Add(colRatio);
 
-        var colCreated = new DataGridViewTextBoxColumn { Name = "ColCreated", HeaderText = "Thời gian tạo", Width = DpiScale(140) };
+        var colCreated = new DataGridViewTextBoxColumn { Name = "ColCreated", HeaderText = "Thời gian tạo", Width = DpiScale(140), ReadOnly = true };
         colCreated.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
         dgvSavedRegions.Columns.Add(colCreated);
 
-        var colNotes = new DataGridViewTextBoxColumn { Name = "ColNotes", HeaderText = "Ghi chú / Đường dẫn", AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill };
+        var colNotes = new DataGridViewTextBoxColumn { Name = "ColNotes", HeaderText = "Ghi chú / Đường dẫn", AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill, ReadOnly = true };
         colNotes.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleLeft;
         dgvSavedRegions.Columns.Add(colNotes);
 
@@ -1122,7 +1148,8 @@ partial class MainCropperForm
             Text = "",
             UseColumnTextForButtonValue = false,
             Width = DpiScale(45),
-            FlatStyle = FlatStyle.Flat
+            FlatStyle = FlatStyle.Flat,
+            ReadOnly = true
         };
         colEditBtn.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
         dgvSavedRegions.Columns.Add(colEditBtn);
@@ -1134,13 +1161,16 @@ partial class MainCropperForm
             Text = "",
             UseColumnTextForButtonValue = false,
             Width = DpiScale(45),
-            FlatStyle = FlatStyle.Flat
+            FlatStyle = FlatStyle.Flat,
+            ReadOnly = true
         };
         colDeleteBtn.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
         dgvSavedRegions.Columns.Add(colDeleteBtn);
 
         dgvSavedRegions.SelectionChanged += (s, e) => OnSavedGridSelectionChanged();
         dgvSavedRegions.CellDoubleClick += (s, e) => OnSavedGridDoubleClick(e);
+        dgvSavedRegions.CellEndEdit += (s, e) => OnSavedGridCellEndEdit(e);
+        dgvSavedRegions.EditingControlShowing += (s, e) => OnSavedGridEditingControlShowing(e);
         dgvSavedRegions.CellContentClick += (s, e) => OnSavedGridCellContentClick(e);
         dgvSavedRegions.CellToolTipTextNeeded += (s, e) => OnSavedGridToolTipTextNeeded(e);
         dgvSavedRegions.CellPainting += (s, e) => OnSavedGridCellPainting(e);
@@ -1237,8 +1267,8 @@ partial class MainCropperForm
             IconSize = DpiScale(13),
             TextImageRelation = TextImageRelation.ImageBeforeText,
             ImageAlign = ContentAlignment.MiddleLeft,
-            TextAlign = ContentAlignment.MiddleLeft,
-            Padding = new Padding(DpiScale(4), 0, DpiScale(4), 0),
+            TextAlign = ContentAlignment.MiddleCenter,
+            Padding = new Padding(DpiScale(6), 0, DpiScale(6), 0),
             Location = new Point(x, y),
             Size = new Size(w, h),
             BackColor = Color.FromArgb(50, 55, 68),

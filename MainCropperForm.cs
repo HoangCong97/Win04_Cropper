@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Imaging;
@@ -10,6 +10,9 @@ using FontAwesome.Sharp;
 using Win04_Cropper.Controls;
 using Win04_Cropper.Models;
 using Win04_Cropper.Services;
+using System.Text.Json;
+using System.Text;
+using System.Text.Encodings.Web;
 
 namespace Win04_Cropper;
 
@@ -31,8 +34,15 @@ public partial class MainCropperForm : Form
     private string _currentSourceName = "";
     private readonly System.Windows.Forms.Timer _autoSaveTimer = new();
     private bool _isProjectDirty;
+    private MediaItem? _activeMediaItem;
 
     internal DataGridView SavedGrid => dgvSavedRegions;
+    internal List<CropRegionItem> SavedRegions => _savedRegions;
+    internal void SetImageForTesting(Bitmap bmp, string name)
+    {
+        canvas.Image = bmp;
+        _currentSourceName = name;
+    }
 
     public MainCropperForm()
     {
@@ -51,7 +61,7 @@ public partial class MainCropperForm : Form
         FormClosing += (s, e) => AutoSaveProjectSilently();
 
         // Ratio buttons collection
-        _ratioButtons.AddRange([btnRatio1x1, btnRatio3x4, btnRatio4x6, btnRatio9x16, btnRatioFree, btnRatio4x3, btnRatio6x4, btnRatio16x9]);
+        _ratioButtons.AddRange([btnRatioFree, btnRatio3x4, btnRatio4x6, btnRatio9x16, btnRatio1x1, btnRatio4x3, btnRatio6x4, btnRatio16x9]);
         SetActiveRatioButton(btnRatioFree);
 
         // Canvas events
@@ -59,22 +69,22 @@ public partial class MainCropperForm : Form
         canvas.CursorMovedOnImage += OnCanvasCursorMoved;
         canvas.ZoomChanged += OnCanvasZoomChanged;
 
-        // Default splitter ratios
-        Shown += (s, e) =>
-        {
-            try
-            {
-                if (splitMain.Height > 100)
-                {
-                    splitMain.SplitterDistance = Math.Clamp((int)(splitMain.Height * 0.62), 50, splitMain.Height - 50);
-                }
-                if (splitTop.Width > 100)
-                {
-                    splitTop.SplitterDistance = Math.Clamp(splitTop.Width - DpiScale(360), DpiScale(250), splitTop.Width - DpiScale(350));
-                }
-            }
-            catch { }
-        };
+        // Initialize Drag & Drop for images
+        InitializeDragDropImageLoading();
+
+        // Wire Media Panel events
+        mediaPanel.MediaSelected += LoadMediaItemToMain;
+        mediaPanel.MediaDoubleClicked += OnMediaItemDoubleClicked;
+        mediaPanel.ImportRequested += () => OpenImageFromFile();
+        mediaPanel.PasteRequested += () => PasteFromClipboard();
+        mediaPanel.FilesDropped += files => ImportFilesToMedia(files, setAsMain: true);
+        mediaPanel.BitmapDropped += bmp => ImportBitmapToMedia(bmp, $"Kéo_thả_{DateTime.Now:yyyyMMdd_HHmmss}", setAsMain: true);
+        mediaPanel.MediaDeleted += OnMediaItemDeleted;
+
+        // Initialize default project as blank
+        _currentProject = null;
+        _currentProjectFilePath = null;
+        UpdateAppTitle();
     }
 
     protected override void OnLoad(EventArgs e)
@@ -106,23 +116,15 @@ public partial class MainCropperForm : Form
             System.Diagnostics.Debug.WriteLine($"RegisterHotKey failed: {ex.Message}");
         }
 
-        // Load saved regions from JSON
-        LoadSavedRegions();
-
-        // Load sample image if present
-        string samplePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "sample_images", "sample_image.jpg");
-        if (File.Exists(samplePath))
+        // Check and restore project from previous session if available
+        string? lastProject = ProjectService.GetLastSessionProjectPath();
+        if (!string.IsNullOrEmpty(lastProject) && File.Exists(lastProject))
         {
-            LoadImageFromPath(samplePath);
+            OpenProjectFromFile(lastProject, showMessage: false);
         }
         else
         {
-            // Try parent sample_images
-            string parentSample = Path.Combine(Directory.GetCurrentDirectory(), "sample_images", "sample_image.jpg");
-            if (File.Exists(parentSample))
-            {
-                LoadImageFromPath(parentSample);
-            }
+            ResetToBlankApp();
         }
     }
 
@@ -131,13 +133,42 @@ public partial class MainCropperForm : Form
         base.OnShown(e);
         try
         {
+            if (splitMain.Height > 100)
+            {
+                splitMain.SplitterDistance = Math.Clamp((int)(splitMain.Height * 0.62), 50, splitMain.Height - 50);
+            }
             if (splitTop.Width > 0)
             {
+                splitTop.Panel1MinSize = 0;
+                splitTop.Panel2MinSize = 0;
                 int desiredPropsWidth = DpiScale(370);
-                splitTop.SplitterDistance = Math.Clamp(splitTop.Width - desiredPropsWidth, splitTop.Panel1MinSize, Math.Max(splitTop.Panel1MinSize, splitTop.Width - splitTop.Panel2MinSize));
+                splitTop.SplitterDistance = Math.Clamp(splitTop.Width - desiredPropsWidth, 100, Math.Max(100, splitTop.Width - 100));
+                splitTop.Panel1MinSize = DpiScale(500);
+                splitTop.Panel2MinSize = DpiScale(360);
             }
+            this.PerformLayout();
+            if (splitMediaCanvas.Width > 0)
+            {
+                splitMediaCanvas.Panel1MinSize = 0;
+                splitMediaCanvas.Panel2MinSize = 0;
+                int desiredMediaWidth = DpiScale(350);
+                if (splitMediaCanvas.Width > desiredMediaWidth + 50)
+                {
+                    splitMediaCanvas.SplitterDistance = desiredMediaWidth;
+                }
+                else if (splitMediaCanvas.Width > 150)
+                {
+                    splitMediaCanvas.SplitterDistance = Math.Clamp(desiredMediaWidth, 100, Math.Max(100, splitMediaCanvas.Width - 100));
+                }
+                splitMediaCanvas.Panel1MinSize = DpiScale(180);
+                splitMediaCanvas.Panel2MinSize = DpiScale(200);
+            }
+            mediaPanel.UpdateView();
         }
-        catch { }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"OnShown layout error: {ex}");
+        }
     }
 
     protected override void OnFormClosing(FormClosingEventArgs e)
@@ -148,6 +179,20 @@ public partial class MainCropperForm : Form
         try
         {
             NativeMethods.UnregisterHotKey(this.Handle, HOTKEY_ID_F9);
+        }
+        catch { }
+
+        // Save last session project path
+        try
+        {
+            if (_currentProject != null && _currentProject.IsCustomNamed && !string.IsNullOrEmpty(_currentProjectFilePath) && File.Exists(_currentProjectFilePath))
+            {
+                ProjectService.SetLastSessionProjectPath(_currentProjectFilePath);
+            }
+            else
+            {
+                ProjectService.SetLastSessionProjectPath(null);
+            }
         }
         catch { }
     }
@@ -243,9 +288,9 @@ public partial class MainCropperForm : Form
         {
             if (!numX.Focused && !numY.Focused && !numW.Focused && !numH.Focused && !dgvSavedRegions.Focused)
             {
-                int step = 10;
-                if ((keyData & Keys.Control) == Keys.Control) step = 1;
-                else if ((keyData & Keys.Shift) == Keys.Shift) step = 50;
+                int step = 1;
+                if ((keyData & Keys.Shift) == Keys.Shift) step = 50;
+                else if ((keyData & Keys.Control) == Keys.Control) step = 10;
 
                 switch (keyCode)
                 {
@@ -268,34 +313,274 @@ public partial class MainCropperForm : Form
     {
         using OpenFileDialog ofd = new()
         {
-            Title = "Chọn ảnh màn hình hoặc hình ảnh cần cắt",
-            Filter = "Ảnh (*.png;*.jpg;*.jpeg;*.bmp;*.webp;*.gif)|*.png;*.jpg;*.jpeg;*.bmp;*.webp;*.gif|Tất cả tệp (*.*)|*.*"
+            Title = "Chọn ảnh nạp vào Media",
+            Filter = "Ảnh (*.png;*.jpg;*.jpeg;*.bmp;*.webp;*.gif)|*.png;*.jpg;*.jpeg;*.bmp;*.webp;*.gif|Tất cả tệp (*.*)|*.*",
+            Multiselect = true
         };
 
-        if (ofd.ShowDialog(this) == DialogResult.OK)
+        if (ofd.ShowDialog(this) == DialogResult.OK && ofd.FileNames.Length > 0)
         {
-            LoadImageFromPath(ofd.FileName);
+            ImportFilesToMedia(ofd.FileNames, setAsMain: canvas.Image == null);
         }
+    }
+
+    private void ImportFilesToMedia(string[] filePaths, bool setAsMain = false)
+    {
+        if (filePaths.Length == 0) return;
+        MediaItem? firstLoaded = null;
+
+        foreach (var path in filePaths)
+        {
+            if (!IsSupportedImageFile(path)) continue;
+            try
+            {
+                using var stream = new FileStream(path, FileMode.Open, FileAccess.Read);
+                using var srcBmp = new Bitmap(stream);
+                Bitmap cloned = new(srcBmp.Width, srcBmp.Height, PixelFormat.Format32bppArgb);
+                using (Graphics g = Graphics.FromImage(cloned))
+                {
+                    g.DrawImage(srcBmp, 0, 0, srcBmp.Width, srcBmp.Height);
+                }
+
+                MediaItem item = new()
+                {
+                    Name = Path.GetFileName(path),
+                    Bitmap = cloned,
+                    Width = cloned.Width,
+                    Height = cloned.Height,
+                    ThumbnailBase64 = ProjectService.GenerateThumbnailBase64(cloned)
+                };
+
+                mediaPanel.AddItem(item);
+                firstLoaded ??= item;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error importing {path}: {ex.Message}");
+            }
+        }
+
+        if (firstLoaded != null && (setAsMain || canvas.Image == null))
+        {
+            LoadMediaItemToMain(firstLoaded);
+        }
+
+        _isProjectDirty = true;
+    }
+
+    private void ImportBitmapToMedia(Bitmap bmp, string name, bool setAsMain = true)
+    {
+        Bitmap cloned = new(bmp.Width, bmp.Height, PixelFormat.Format32bppArgb);
+        using (Graphics g = Graphics.FromImage(cloned))
+        {
+            g.DrawImage(bmp, 0, 0, bmp.Width, bmp.Height);
+        }
+
+        MediaItem item = new()
+        {
+            Name = name,
+            Bitmap = cloned,
+            Width = cloned.Width,
+            Height = cloned.Height,
+            ThumbnailBase64 = ProjectService.GenerateThumbnailBase64(cloned)
+        };
+
+        mediaPanel.AddItem(item);
+
+        if (setAsMain || canvas.Image == null)
+        {
+            LoadMediaItemToMain(item);
+        }
+
+        _isProjectDirty = true;
+    }
+
+    private void LoadMediaItemToMain(MediaItem item)
+    {
+        // Flush state of previous active media item
+        FlushActiveMediaState();
+
+        bool isAlive = false;
+        if (item.Bitmap != null)
+        {
+            try { _ = item.Bitmap.Width; isAlive = true; } catch { isAlive = false; }
+        }
+
+        if (!isAlive && !string.IsNullOrEmpty(item.ImageBase64))
+        {
+            item.Bitmap = ProjectService.BitmapFromBase64(item.ImageBase64);
+            isAlive = item.Bitmap != null;
+        }
+
+        if (isAlive && item.Bitmap != null)
+        {
+            _activeMediaItem = item;
+            _currentSourceName = item.Name;
+
+            Rectangle? savedCrop = (item.SavedCropW.HasValue && item.SavedCropW.Value > 0 && item.SavedCropH.HasValue && item.SavedCropH.Value > 0)
+                ? new Rectangle(item.SavedCropX ?? 0, item.SavedCropY ?? 0, item.SavedCropW.Value, item.SavedCropH.Value)
+                : null;
+            float? savedZoom = item.SavedZoomFactor;
+            PointF? savedPan = (item.SavedPanX.HasValue && item.SavedPanY.HasValue)
+                ? new PointF(item.SavedPanX.Value, item.SavedPanY.Value)
+                : null;
+
+            canvas.SetImageWithState(item.Bitmap, savedCrop, savedZoom, savedPan);
+
+            lblImageInfo.Text = $"Ảnh: {item.Name} ({item.Bitmap.Width} × {item.Bitmap.Height} px)";
+            canvas.ImageOverlayInfo = lblImageInfo.Text;
+            mediaPanel.SetActiveItem(item);
+
+            numX.Maximum = Math.Max(0, item.Bitmap.Width - 1);
+            numY.Maximum = Math.Max(0, item.Bitmap.Height - 1);
+            numW.Maximum = item.Bitmap.Width;
+            numH.Maximum = item.Bitmap.Height;
+
+            UpdateInputsFromCropRect(canvas.CropRect);
+
+            if (_currentProject == null)
+            {
+                _currentProject = new ProjectData
+                {
+                    Name = GenerateDefaultProjectName(),
+                    IsCustomNamed = false
+                };
+            }
+
+            UpdateAppTitle();
+            _isProjectDirty = true;
+        }
+    }
+
+    private void FlushActiveMediaState()
+    {
+        if (_activeMediaItem != null && canvas.Image != null)
+        {
+            _activeMediaItem.SavedCropX = canvas.CropRect.X;
+            _activeMediaItem.SavedCropY = canvas.CropRect.Y;
+            _activeMediaItem.SavedCropW = canvas.CropRect.Width;
+            _activeMediaItem.SavedCropH = canvas.CropRect.Height;
+            _activeMediaItem.SavedZoomFactor = canvas.ZoomFactor;
+            _activeMediaItem.SavedPanX = canvas.PanOffset.X;
+            _activeMediaItem.SavedPanY = canvas.PanOffset.Y;
+        }
+    }
+
+    private void OnMediaItemDoubleClicked(MediaItem item)
+    {
+        LoadMediaItemToMain(item);
+    }
+
+    private void OnMediaItemDeleted(MediaItem item)
+    {
+        if (_activeMediaItem == item)
+        {
+            _activeMediaItem = null;
+        }
+
+        if (canvas.Image != null && (canvas.Image == item.Bitmap || string.Equals(_currentSourceName, item.Name, StringComparison.OrdinalIgnoreCase)))
+        {
+            canvas.Image = null;
+            lblImageInfo.Text = "Ảnh: Chưa nạp";
+            canvas.ImageOverlayInfo = "Chưa nạp ảnh (Kéo & thả ảnh từ Media vào đây)";
+            canvas.SetCropRect(Rectangle.Empty);
+            canvas.Invalidate();
+        }
+        try { item.Bitmap?.Dispose(); } catch { }
+        item.Bitmap = null;
     }
 
     private void LoadImageFromPath(string filePath)
     {
-        try
-        {
-            using var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read);
-            using var srcBmp = new Bitmap(stream);
-            // Clone into 32bppArgb to release file lock and ensure fast rendering
-            Bitmap cloned = new(srcBmp.Width, srcBmp.Height, PixelFormat.Format32bppArgb);
-            using (Graphics g = Graphics.FromImage(cloned))
-            {
-                g.DrawImage(srcBmp, 0, 0, srcBmp.Width, srcBmp.Height);
-            }
+        ImportFilesToMedia(new[] { filePath }, setAsMain: true);
+    }
 
-            SetSourceImage(cloned, Path.GetFileName(filePath));
-        }
-        catch (Exception ex)
+    private static readonly HashSet<string> SupportedImageExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".png", ".jpg", ".jpeg", ".bmp", ".webp", ".gif", ".ico", ".tiff", ".tif"
+    };
+
+    private static bool IsSupportedImageFile(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return false;
+        string ext = Path.GetExtension(path);
+        return SupportedImageExtensions.Contains(ext);
+    }
+
+    private static string GenerateDefaultProjectName() => $"Dự án_{DateTime.Now:yyyyMMdd_HHmm}";
+
+    private void InitializeDragDropImageLoading()
+    {
+        // Canvas drag drop
+        canvas.AllowDrop = true;
+        canvas.DragEnter += OnDragDropFileEnter;
+        canvas.DragOver += OnDragDropFileOver;
+        canvas.DragDrop += OnDragDropFileDrop;
+
+        // Container panel drag drop
+        pnlCanvasContainer.AllowDrop = true;
+        pnlCanvasContainer.DragEnter += OnDragDropFileEnter;
+        pnlCanvasContainer.DragOver += OnDragDropFileOver;
+        pnlCanvasContainer.DragDrop += OnDragDropFileDrop;
+
+        // Form level drag drop
+        this.AllowDrop = true;
+        this.DragEnter += OnDragDropFileEnter;
+        this.DragOver += OnDragDropFileOver;
+        this.DragDrop += OnDragDropFileDrop;
+    }
+
+    private void OnDragDropFileEnter(object? sender, DragEventArgs e)
+    {
+        if (e.Data != null && (
+            e.Data.GetDataPresent(typeof(MediaItem)) ||
+            e.Data.GetDataPresent(DataFormats.FileDrop) ||
+            e.Data.GetDataPresent(DataFormats.Bitmap)))
         {
-            MessageBox.Show($"Không thể mở ảnh: {ex.Message}", "Lỗi nạp ảnh", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            e.Effect = DragDropEffects.Copy;
+        }
+        else
+        {
+            e.Effect = DragDropEffects.None;
+        }
+    }
+
+    private void OnDragDropFileOver(object? sender, DragEventArgs e)
+    {
+        if (e.Data != null && (
+            e.Data.GetDataPresent(typeof(MediaItem)) ||
+            e.Data.GetDataPresent(DataFormats.FileDrop) ||
+            e.Data.GetDataPresent(DataFormats.Bitmap)))
+        {
+            e.Effect = DragDropEffects.Copy;
+        }
+        else
+        {
+            e.Effect = DragDropEffects.None;
+        }
+    }
+
+    private void OnDragDropFileDrop(object? sender, DragEventArgs e)
+    {
+        if (e.Data == null) return;
+
+        if (e.Data.GetData(typeof(MediaItem)) is MediaItem mediaItem)
+        {
+            LoadMediaItemToMain(mediaItem);
+        }
+        else if (e.Data.GetDataPresent(DataFormats.FileDrop))
+        {
+            if (e.Data.GetData(DataFormats.FileDrop) is string[] files && files.Length > 0)
+            {
+                ImportFilesToMedia(files, setAsMain: true);
+            }
+        }
+        else if (e.Data.GetDataPresent(DataFormats.Bitmap))
+        {
+            if (e.Data.GetData(DataFormats.Bitmap) is Bitmap bmp)
+            {
+                ImportBitmapToMedia(bmp, $"Kéo_thả_{DateTime.Now:yyyyMMdd_HHmmss}", setAsMain: true);
+            }
         }
     }
 
@@ -314,7 +599,7 @@ public partial class MainCropperForm : Form
                         g.DrawImage(img, 0, 0, img.Width, img.Height);
                     }
                     img.Dispose();
-                    SetSourceImage(bmp, $"Clipboard_{DateTime.Now:HHmmss}");
+                    ImportBitmapToMedia(bmp, $"Clipboard_{DateTime.Now:HHmmss}", setAsMain: true);
                 }
             }
             catch (Exception ex)
@@ -339,7 +624,7 @@ public partial class MainCropperForm : Form
             Bitmap? captured = await ScreenCaptureService.CaptureScreenAsync(this, allScreens: true, delayMs: 160);
             if (captured != null)
             {
-                SetSourceImage(captured, $"LiveCapture_{DateTime.Now:HHmmss}");
+                ImportBitmapToMedia(captured, $"LiveCapture_{DateTime.Now:HHmmss}", setAsMain: true);
             }
         }
         finally
@@ -359,7 +644,7 @@ public partial class MainCropperForm : Form
             Bitmap? captured = await ScreenCaptureService.CaptureForegroundWindowAsync(this, delayMs: 160);
             if (captured != null)
             {
-                SetSourceImage(captured, $"Window_{DateTime.Now:HHmmss}");
+                ImportBitmapToMedia(captured, $"Window_{DateTime.Now:HHmmss}", setAsMain: true);
             }
         }
         finally
@@ -372,11 +657,28 @@ public partial class MainCropperForm : Form
     private void SetSourceImage(Bitmap bmp, string sourceName)
     {
         _currentSourceName = sourceName;
-        canvas.Image?.Dispose();
+        // Do not dispose canvas.Image here because bitmaps are managed by mediaPanel
         canvas.Image = bmp;
 
         lblImageInfo.Text = $"Ảnh: {sourceName} ({bmp.Width} × {bmp.Height} px)";
         canvas.ImageOverlayInfo = lblImageInfo.Text;
+
+        // Ensure image is also in Media Panel
+        MediaItem? matching = mediaPanel.Items.FirstOrDefault(m => string.Equals(m.Name, sourceName, StringComparison.OrdinalIgnoreCase));
+        if (matching == null)
+        {
+            matching = new()
+            {
+                Name = sourceName,
+                Bitmap = bmp,
+                Width = bmp.Width,
+                Height = bmp.Height,
+                ThumbnailBase64 = ProjectService.GenerateThumbnailBase64(bmp)
+            };
+            mediaPanel.AddItem(matching);
+        }
+        _activeMediaItem = matching;
+        mediaPanel.SetActiveItemByName(sourceName);
 
         // Set max limits for coordinates
         numX.Maximum = Math.Max(0, bmp.Width - 1);
@@ -389,10 +691,14 @@ public partial class MainCropperForm : Form
 
         if (_currentProject == null)
         {
-            _currentProject = new ProjectData { Name = sourceName };
-            UpdateAppTitle();
+            _currentProject = new ProjectData
+            {
+                Name = GenerateDefaultProjectName(),
+                IsCustomNamed = false
+            };
         }
 
+        UpdateAppTitle();
         _isProjectDirty = true;
     }
 
@@ -595,6 +901,28 @@ public partial class MainCropperForm : Form
         }
     }
 
+    private void ApplyFullImageResolution()
+    {
+        canvas.LockedAspectRatio = null;
+        SetActiveRatioButton(btnRatioFree);
+
+        if (canvas.Image != null)
+        {
+            Rectangle fullRect = new(0, 0, canvas.Image.Width, canvas.Image.Height);
+            canvas.SetCropRect(fullRect);
+            UpdateInputsFromCropRect(fullRect);
+        }
+        else
+        {
+            _isUpdatingInputs = true;
+            numX.Value = 0;
+            numY.Value = 0;
+            numW.Value = numW.Maximum;
+            numH.Value = numH.Maximum;
+            _isUpdatingInputs = false;
+        }
+    }
+
     #endregion
 
     #region Nudge and Resize Actions
@@ -698,7 +1026,7 @@ public partial class MainCropperForm : Form
             return;
         }
 
-        string defaultName = _currentlyEditingItem?.Name ?? GenerateUniqueName("Crop_");
+        string defaultName = _currentlyEditingItem?.Name ?? GenerateUniqueName("Crop ");
         string? origName = _currentlyEditingItem?.Name;
 
         using NameInputDialog dlg = new(
@@ -717,7 +1045,16 @@ public partial class MainCropperForm : Form
 
         Bitmap? sourceBmp = canvas.Image != null ? new Bitmap(canvas.Image) : null;
         string? sourceB64 = canvas.Image != null ? ProjectService.ImageToBase64(canvas.Image) : null;
-        string sourceName = !string.IsNullOrEmpty(_currentSourceName) ? _currentSourceName : (_currentProject?.Name ?? "Main capture");
+        if (_currentProject == null)
+        {
+            _currentProject = new ProjectData
+            {
+                Name = GenerateDefaultProjectName(),
+                IsCustomNamed = false
+            };
+            UpdateAppTitle();
+        }
+        string sourceName = !string.IsNullOrEmpty(_currentSourceName) ? _currentSourceName : _currentProject.Name;
 
         if (!isSaveAsNew && _currentlyEditingItem != null)
         {
@@ -735,8 +1072,7 @@ public partial class MainCropperForm : Form
 
             CancelEditing();
             RefreshSavedGrid();
-
-            MessageBox.Show($"Đã cập nhật object ảnh [{chosenName}] vào dự án!", "Cập nhật thành công", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            _isProjectDirty = true;
         }
         else
         {
@@ -766,8 +1102,7 @@ public partial class MainCropperForm : Form
                 dgvSavedRegions.ClearSelection();
                 dgvSavedRegions.Rows[^1].Selected = true;
             }
-
-            MessageBox.Show($"Đã thêm object ảnh [{chosenName}] vào dự án thành công!", "Lưu mềm thành công", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            _isProjectDirty = true;
         }
     }
 
@@ -797,18 +1132,30 @@ public partial class MainCropperForm : Form
 
     private string GenerateUniqueName(string prefix)
     {
-        int index = 1;
-        while (_savedRegions.Any(r => string.Equals(r.Name, $"{prefix}{index}", StringComparison.OrdinalIgnoreCase)))
+        int maxIndex = 0;
+        foreach (var r in _savedRegions)
         {
-            index++;
+            if (r.Name != null && r.Name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                string suffix = r.Name.Substring(prefix.Length).Trim();
+                if (int.TryParse(suffix, out int n) && n > maxIndex)
+                {
+                    maxIndex = n;
+                }
+            }
         }
-        return $"{prefix}{index}";
+        int nextIndex = maxIndex + 1;
+        while (_savedRegions.Any(r => string.Equals(r.Name, $"{prefix}{nextIndex}", StringComparison.OrdinalIgnoreCase)))
+        {
+            nextIndex++;
+        }
+        return $"{prefix}{nextIndex}";
     }
 
     private void SaveCurrentCoordinates()
     {
         Rectangle r = canvas.CropRect;
-        string defaultName = _currentlyEditingItem?.Name ?? GenerateUniqueName("Vung_");
+        string defaultName = _currentlyEditingItem?.Name ?? GenerateUniqueName("Area ");
         string? origName = _currentlyEditingItem?.Name;
 
         using NameInputDialog dlg = new(
@@ -826,7 +1173,16 @@ public partial class MainCropperForm : Form
 
         Bitmap? sourceBmp = canvas.Image != null ? new Bitmap(canvas.Image) : null;
         string? sourceB64 = canvas.Image != null ? ProjectService.ImageToBase64(canvas.Image) : null;
-        string sourceName = !string.IsNullOrEmpty(_currentSourceName) ? _currentSourceName : (_currentProject?.Name ?? "Main capture");
+        if (_currentProject == null)
+        {
+            _currentProject = new ProjectData
+            {
+                Name = GenerateDefaultProjectName(),
+                IsCustomNamed = false
+            };
+            UpdateAppTitle();
+        }
+        string sourceName = !string.IsNullOrEmpty(_currentSourceName) ? _currentSourceName : _currentProject.Name;
 
         if (!isSaveAsNew && _currentlyEditingItem != null)
         {
@@ -842,10 +1198,9 @@ public partial class MainCropperForm : Form
             _currentlyEditingItem.SourceImageBase64 = sourceB64;
             _currentlyEditingItem.SourceImageName = sourceName;
 
-            string updatedName = _currentlyEditingItem.Name;
             CancelEditing();
             RefreshSavedGrid();
-            MessageBox.Show($"Đã cập nhật tọa độ [{updatedName}] vào dự án!", "Cập nhật thành công", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            _isProjectDirty = true;
         }
         else
         {
@@ -874,8 +1229,7 @@ public partial class MainCropperForm : Form
                 dgvSavedRegions.ClearSelection();
                 dgvSavedRegions.Rows[^1].Selected = true;
             }
-
-            MessageBox.Show($"Đã thêm object tọa độ [{item.Name}] vào dự án thành công!", "Lưu mềm thành công", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            _isProjectDirty = true;
         }
     }
 
@@ -996,8 +1350,7 @@ public partial class MainCropperForm : Form
 
         RefreshSavedGrid();
         CancelEditing();
-
-        MessageBox.Show($"Đã cập nhật tọa độ mới cho [{target.Name}] thành công!", "Cập nhật thành công", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        _isProjectDirty = true;
     }
 
     private void DeleteSelectedRegion()
@@ -1021,172 +1374,393 @@ public partial class MainCropperForm : Form
 
     private void ExportPackage()
     {
-        if (_savedRegions.Count == 0)
+        if (_savedRegions.Count == 0 && mediaPanel.Items.Count == 0)
         {
-            MessageBox.Show("Chưa có mục nào trong danh sách đã lưu để xuất!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show("Chưa có mục nào trong danh sách đã lưu hoặc trong Media để xuất!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
 
+        int areaCount = _savedRegions.Count(r => r.ItemType == CropItemType.Coordinate);
+        int cropCount = _savedRegions.Count(r => r.ItemType == CropItemType.Image);
+
+        string defaultExportName = !string.IsNullOrWhiteSpace(_currentProject?.Name)
+            ? $"{SanitizeFileName(_currentProject.Name)}_Export_{DateTime.Now:yyyyMMdd_HHmm}"
+            : $"Cropper_Export_{DateTime.Now:yyyyMMdd_HHmm}";
+
+        // Show export options modal dialog
+        using ExportOptionsDialog optDlg = new(defaultExportName, areaCount, cropCount, _dpiScale);
+        if (optDlg.ShowDialog(this) != DialogResult.OK) return;
+
+        string packageName = optDlg.ExportPackageName;
+        bool exportSources = optDlg.ExportSources;
+        bool exportAreasWithImages = optDlg.ExportAreasWithImages;
+
         using FolderBrowserDialog fbd = new()
         {
-            Description = "Chọn thư mục lưu gói xuất (Tool sẽ tạo thư mục 'images' và 'Coordinates')",
+            Description = "Chọn thư mục lưu gói xuất",
             UseDescriptionForTitle = true
         };
 
         if (fbd.ShowDialog(this) != DialogResult.OK) return;
 
+        string exportRoot = Path.Combine(fbd.SelectedPath, packageName);
+        ExportDatasetToFolder(exportRoot, packageName, exportSources, exportAreasWithImages, showSuccessDialog: true);
+    }
+
+    internal void ExportDatasetToFolder(string exportRoot, bool exportAreasWithImages, bool exportCropsWithCoords, bool showSuccessDialog = true)
+    {
+        string packageName = Path.GetFileName(exportRoot);
+        ExportDatasetToFolder(exportRoot, packageName, exportSources: false, exportAreasWithImages, showSuccessDialog);
+    }
+
+    internal void ExportDatasetToFolder(string exportRoot, string packageName, bool exportSources, bool exportAreasWithImages, bool showSuccessDialog = true)
+    {
         try
         {
-            string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
-            string exportRoot = Path.Combine(fbd.SelectedPath, $"Cropper_Export_{timestamp}");
-            string imagesDir = Path.Combine(exportRoot, "images");
-            string coordsDir = Path.Combine(exportRoot, "Coordinates");
+            string safeProjectName = !string.IsNullOrWhiteSpace(_currentProject?.Name)
+                ? SanitizeFileName(_currentProject.Name)
+                : "Cropper";
 
-            Directory.CreateDirectory(imagesDir);
-            Directory.CreateDirectory(coordsDir);
+            string cropsDir = Path.Combine(exportRoot, "crops");
+            string sourcesDir = Path.Combine(exportRoot, "sources");
 
-            int exportedImages = 0;
-            int exportedCoords = 0;
-
-            // 1. Export Images to images/
-            for (int i = 0; i < _savedRegions.Count; i++)
+            Directory.CreateDirectory(exportRoot);
+            Directory.CreateDirectory(cropsDir);
+            if (exportSources)
             {
-                var item = _savedRegions[i];
-                string safeName = SanitizeFileName(item.Name);
+                Directory.CreateDirectory(sourcesDir);
+            }
 
-                // If image file exists on disk, copy it
-                if (!string.IsNullOrEmpty(item.ImagePath) && File.Exists(item.ImagePath))
+            int exportedSources = 0;
+            int exportedCrops = 0;
+            int exportedAreas = 0;
+
+            // -----------------------------------------------------------------
+            // Step 1: Collect & optionally save unique source images to sources/
+            // -----------------------------------------------------------------
+            Dictionary<string, (string FileName, int Width, int Height)> sourceInfoDict = new(StringComparer.OrdinalIgnoreCase);
+            HashSet<string> usedSourceFiles = new(StringComparer.OrdinalIgnoreCase);
+
+            string RegisterSource(string rawName, Bitmap? bmp)
+            {
+                if (bmp == null || bmp.Width <= 0 || bmp.Height <= 0) return "";
+                string key = string.IsNullOrWhiteSpace(rawName) ? "image" : rawName;
+                if (sourceInfoDict.TryGetValue(key, out var existing))
                 {
-                    string ext = Path.GetExtension(item.ImagePath);
-                    if (string.IsNullOrEmpty(ext)) ext = ".png";
-                    string destPath = Path.Combine(imagesDir, $"{safeName}{ext}");
-                    File.Copy(item.ImagePath, destPath, true);
-                    exportedImages++;
+                    return existing.FileName;
                 }
-                // Otherwise if we have source canvas image, crop and save the region as PNG
-                else if (canvas.Image != null)
-                {
-                    Rectangle r = new(item.X, item.Y, item.Width, item.Height);
-                    Rectangle imgRect = new(0, 0, canvas.Image.Width, canvas.Image.Height);
-                    Rectangle intersect = Rectangle.Intersect(r, imgRect);
 
-                    if (intersect.Width > 0 && intersect.Height > 0)
+                string baseName = Path.GetFileNameWithoutExtension(key);
+                if (string.IsNullOrWhiteSpace(baseName)) baseName = "image";
+                baseName = SanitizeFileName(baseName);
+
+                string fileName = $"{baseName}.png";
+                int counter = 1;
+                while (usedSourceFiles.Contains(fileName))
+                {
+                    fileName = $"{baseName}_{counter++}.png";
+                }
+                usedSourceFiles.Add(fileName);
+
+                if (exportSources)
+                {
+                    string targetPath = Path.Combine(sourcesDir, fileName);
+                    bmp.Save(targetPath, ImageFormat.Png);
+                    exportedSources++;
+                }
+
+                sourceInfoDict[key] = (fileName, bmp.Width, bmp.Height);
+                return fileName;
+            }
+
+            // Register canvas / active source image
+            if (canvas.Image != null)
+            {
+                RegisterSource(_currentSourceName, canvas.Image);
+            }
+
+            // Register media panel items
+            foreach (var mi in mediaPanel.Items)
+            {
+                if (mi.Bitmap != null)
+                {
+                    RegisterSource(mi.Name, mi.Bitmap);
+                }
+            }
+
+            // Register source bitmaps from saved regions
+            foreach (var r in _savedRegions)
+            {
+                if (r.SourceBitmap != null)
+                {
+                    RegisterSource(r.SourceImageName ?? r.Name, r.SourceBitmap);
+                }
+                else if (!string.IsNullOrEmpty(r.SourceImageBase64))
+                {
+                    using var tmp = ProjectService.BitmapFromBase64(r.SourceImageBase64);
+                    if (tmp != null)
                     {
-                        using Bitmap cropped = new(intersect.Width, intersect.Height, PixelFormat.Format32bppArgb);
-                        using (Graphics g = Graphics.FromImage(cropped))
-                        {
-                            g.DrawImage(canvas.Image, new Rectangle(0, 0, cropped.Width, cropped.Height), intersect, GraphicsUnit.Pixel);
-                        }
-                        string destPath = Path.Combine(imagesDir, $"{safeName}.png");
-                        cropped.Save(destPath, ImageFormat.Png);
-                        exportedImages++;
+                        RegisterSource(r.SourceImageName ?? r.Name, tmp);
                     }
                 }
             }
 
-            // 2. Export Coordinates to Coordinates/
-            // 2a. Consolidated Coordinates.json
-            string jsonPath = Path.Combine(coordsDir, "Coordinates.json");
-            ConfigStorageService.SaveRegions(_savedRegions, jsonPath);
-            exportedCoords++;
+            // -----------------------------------------------------------------
+            // Step 2: Separate Regions into Areas & Crops
+            // -----------------------------------------------------------------
+            var areaItems = _savedRegions.Where(r => r.ItemType == CropItemType.Coordinate).ToList();
+            var cropItems = _savedRegions.Where(r => r.ItemType == CropItemType.Image).ToList();
 
-            // 2b. Consolidated Coordinates.csv (with UTF-8 BOM for Excel)
-            string csvPath = Path.Combine(coordsDir, "Coordinates.csv");
-            using (var writer = new StreamWriter(csvPath, false, new System.Text.UTF8Encoding(true)))
+            var areasExportList = new List<object>();
+            var cropsExportList = new List<object>();
+
+            // Process Crops
+            int cropSeq = 1;
+            foreach (var r in cropItems)
             {
-                writer.WriteLine("STT,Phân loại,Tên vùng / ảnh,Tọa độ X,Tọa độ Y,Chiều rộng (W),Chiều cao (H),Tỉ lệ,Thời gian tạo,Ghi chú");
-                for (int i = 0; i < _savedRegions.Count; i++)
+                string safeName = SanitizeFileName(string.IsNullOrWhiteSpace(r.Name) ? $"Crop_{cropSeq}" : r.Name);
+                string cropFileName = $"crop_{cropSeq:D3}_{safeName}.png";
+                string cropFilePath = Path.Combine(cropsDir, cropFileName);
+
+                Bitmap? srcBmp = r.SourceBitmap;
+                bool disposeSrc = false;
+                if (srcBmp == null && !string.IsNullOrEmpty(r.SourceImageBase64))
                 {
-                    var it = _savedRegions[i];
-                    string escName = EscapeCsv(it.Name);
-                    string escNotes = EscapeCsv(it.Notes ?? "");
-                    writer.WriteLine($"{i + 1},{it.TypeDisplay},{escName},{it.X},{it.Y},{it.Width},{it.Height},{it.AspectRatioStr},{it.CreatedAt:yyyy-MM-dd HH:mm:ss},{escNotes}");
+                    srcBmp = ProjectService.BitmapFromBase64(r.SourceImageBase64);
+                    disposeSrc = true;
                 }
+                if (srcBmp == null && canvas.Image != null)
+                {
+                    srcBmp = canvas.Image;
+                }
+
+                int srcW = srcBmp?.Width ?? 0;
+                int srcH = srcBmp?.Height ?? 0;
+                string srcFileName = "";
+                if (srcBmp != null)
+                {
+                    string srcKey = r.SourceImageName ?? _currentSourceName;
+                    if (sourceInfoDict.TryGetValue(srcKey, out var sInfo))
+                    {
+                        srcFileName = sInfo.FileName;
+                    }
+                    else
+                    {
+                        srcFileName = RegisterSource(srcKey, srcBmp);
+                    }
+                }
+
+                // Extract and save crop image
+                if (srcBmp != null)
+                {
+                    Rectangle cropRect = new(r.X, r.Y, r.Width, r.Height);
+                    cropRect.Intersect(new Rectangle(0, 0, srcBmp.Width, srcBmp.Height));
+                    if (cropRect.Width > 0 && cropRect.Height > 0)
+                    {
+                        using var cropped = srcBmp.Clone(cropRect, PixelFormat.Format32bppArgb);
+                        cropped.Save(cropFilePath, ImageFormat.Png);
+                        exportedCrops++;
+                    }
+                }
+
+                if (disposeSrc) srcBmp?.Dispose();
+
+                cropsExportList.Add(new
+                {
+                    id = cropSeq,
+                    name = r.Name,
+                    file_name = cropFileName,
+                    relative_path = $"crops/{cropFileName}",
+                    source_image = string.IsNullOrEmpty(srcFileName) ? (r.SourceImageName ?? "") : srcFileName,
+                    source_width = srcW,
+                    source_height = srcH,
+                    x = r.X,
+                    y = r.Y,
+                    width = r.Width,
+                    height = r.Height,
+                    aspect_ratio = r.AspectRatioStr
+                });
+
+                cropSeq++;
             }
-            exportedCoords++;
 
-            // 2c. Consolidated Coordinates.txt (Human-readable overview)
-            string txtPath = Path.Combine(coordsDir, "Coordinates.txt");
-            var sb = new System.Text.StringBuilder();
-            sb.AppendLine("==========================================================================");
-            sb.AppendLine(" SCREEN CROPPER PRO - TỌA ĐỘ VÀ KÍCH THƯỚC CÁC VÙNG ĐÃ LƯU");
-            sb.AppendLine($" Thời gian xuất: {DateTime.Now:dd/MM/yyyy HH:mm:ss}");
-            sb.AppendLine($" Tổng số mục: {_savedRegions.Count}");
-            sb.AppendLine("==========================================================================");
-            sb.AppendLine();
-            for (int i = 0; i < _savedRegions.Count; i++)
+            // Process Areas
+            int areaSeq = 1;
+            foreach (var r in areaItems)
             {
-                var it = _savedRegions[i];
-                sb.AppendLine($"[{i + 1}] {it.Name} ({it.TypeDisplay})");
-                sb.AppendLine($"    • Tọa độ (X, Y)       : X = {it.X}, Y = {it.Y}");
-                sb.AppendLine($"    • Kích thước (W × H)  : {it.Width} × {it.Height} px (Tỉ lệ: {it.AspectRatioStr})");
-                sb.AppendLine($"    • Thời gian tạo      : {it.CreatedAt:HH:mm:ss dd/MM/yyyy}");
-                if (!string.IsNullOrEmpty(it.Notes))
+                Bitmap? srcBmp = r.SourceBitmap;
+                bool disposeSrc = false;
+                if (srcBmp == null && !string.IsNullOrEmpty(r.SourceImageBase64))
                 {
-                    sb.AppendLine($"    • Ghi chú            : {it.Notes}");
+                    srcBmp = ProjectService.BitmapFromBase64(r.SourceImageBase64);
+                    disposeSrc = true;
                 }
-                if (!string.IsNullOrEmpty(it.ImagePath))
+                if (srcBmp == null && canvas.Image != null)
                 {
-                    sb.AppendLine($"    • Đường dẫn ảnh gốc   : {it.ImagePath}");
+                    srcBmp = canvas.Image;
                 }
-                sb.AppendLine();
+
+                int srcW = srcBmp?.Width ?? 0;
+                int srcH = srcBmp?.Height ?? 0;
+                string srcFileName = "";
+                if (srcBmp != null)
+                {
+                    string srcKey = r.SourceImageName ?? _currentSourceName;
+                    if (sourceInfoDict.TryGetValue(srcKey, out var sInfo))
+                    {
+                        srcFileName = sInfo.FileName;
+                    }
+                    else
+                    {
+                        srcFileName = RegisterSource(srcKey, srcBmp);
+                    }
+                }
+
+                string? areaCropFile = null;
+                if (exportAreasWithImages && srcBmp != null)
+                {
+                    string safeName = SanitizeFileName(string.IsNullOrWhiteSpace(r.Name) ? $"Area_{areaSeq}" : r.Name);
+                    string areaFileName = $"area_{areaSeq:D3}_{safeName}.png";
+                    string areaFilePath = Path.Combine(cropsDir, areaFileName);
+
+                    Rectangle cropRect = new(r.X, r.Y, r.Width, r.Height);
+                    cropRect.Intersect(new Rectangle(0, 0, srcBmp.Width, srcBmp.Height));
+                    if (cropRect.Width > 0 && cropRect.Height > 0)
+                    {
+                        using var cropped = srcBmp.Clone(cropRect, PixelFormat.Format32bppArgb);
+                        cropped.Save(areaFilePath, ImageFormat.Png);
+                        areaCropFile = $"crops/{areaFileName}";
+                    }
+                }
+
+                if (disposeSrc) srcBmp?.Dispose();
+
+                areasExportList.Add(new
+                {
+                    id = areaSeq,
+                    name = r.Name,
+                    source_image = string.IsNullOrEmpty(srcFileName) ? (r.SourceImageName ?? "") : srcFileName,
+                    source_width = srcW,
+                    source_height = srcH,
+                    x = r.X,
+                    y = r.Y,
+                    width = r.Width,
+                    height = r.Height,
+                    aspect_ratio = r.AspectRatioStr,
+                    crop_file = areaCropFile
+                });
+
+                areaSeq++;
+                exportedAreas++;
             }
-            File.WriteAllText(txtPath, sb.ToString(), System.Text.Encoding.UTF8);
-            exportedCoords++;
 
-            // 2d. Individual text files per item: Coordinates/{Name}.txt
-            for (int i = 0; i < _savedRegions.Count; i++)
+            // -----------------------------------------------------------------
+            // Step 3: Write data.json
+            // -----------------------------------------------------------------
+            var exportPayload = new
             {
-                var it = _savedRegions[i];
-                string singleTxtPath = Path.Combine(coordsDir, $"{SanitizeFileName(it.Name)}.txt");
-                string singleContent =
-                    $"Name={it.Name}\n" +
-                    $"Type={it.ItemType}\n" +
-                    $"X={it.X}\n" +
-                    $"Y={it.Y}\n" +
-                    $"Width={it.Width}\n" +
-                    $"Height={it.Height}\n" +
-                    $"AspectRatio={it.AspectRatioStr}\n" +
-                    $"CreatedAt={it.CreatedAt:yyyy-MM-dd HH:mm:ss}\n" +
-                    $"Notes={it.Notes ?? ""}\n";
-                File.WriteAllText(singleTxtPath, singleContent, System.Text.Encoding.UTF8);
-                exportedCoords++;
-            }
-
-            // Summary file in root
-            string summaryPath = Path.Combine(exportRoot, "Export_Summary.txt");
-            string summaryContent =
-                $"GÓI XUẤT SCREEN CROPPER PRO\n" +
-                $"Thời gian: {DateTime.Now:dd/MM/yyyy HH:mm:ss}\n\n" +
-                $"- images/: {exportedImages} tệp hình ảnh\n" +
-                $"- Coordinates/: {exportedCoords} tệp tọa độ (bao gồm Coordinates.json, Coordinates.csv, Coordinates.txt và các file .txt riêng cho từng mục)\n";
-            File.WriteAllText(summaryPath, summaryContent, System.Text.Encoding.UTF8);
-
-            var ask = MessageBox.Show(
-                $"Xuất trọn gói thành công!\n\n" +
-                $"Thư mục đích:\n{exportRoot}\n\n" +
-                $"• images/       : {exportedImages} tệp ảnh đã xuất\n" +
-                $"• Coordinates/  : {exportedCoords} tệp tọa độ (JSON, CSV, TXT)\n\n" +
-                $"Bạn có muốn mở thư mục vừa xuất trong Windows Explorer không?",
-                "Xuất trọn gói thành công",
-                MessageBoxButtons.YesNo,
-                MessageBoxIcon.Information);
-
-            if (ask == DialogResult.Yes)
-            {
-                try
+                project_name = safeProjectName,
+                package_name = packageName,
+                export_time = DateTime.Now.ToString("s"),
+                summary = new
                 {
-                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", exportRoot) { UseShellExecute = true });
+                    total_areas = areasExportList.Count,
+                    total_crops = cropsExportList.Count,
+                    has_source_images = exportSources
+                },
+                areas = areasExportList,
+                crops = cropsExportList
+            };
+
+            var jsonOptions = new JsonSerializerOptions
+            {
+                WriteIndented = true,
+                Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+            };
+            string jsonData = JsonSerializer.Serialize(exportPayload, jsonOptions);
+            File.WriteAllText(Path.Combine(exportRoot, "data.json"), jsonData, Encoding.UTF8);
+
+            // -----------------------------------------------------------------
+            // Step 4: Write README.md
+            // -----------------------------------------------------------------
+            var sbReadme = new StringBuilder();
+            sbReadme.AppendLine($"# D\u1EEF li\u1EC7u xu\u1EA5t: {packageName}");
+            sbReadme.AppendLine();
+            sbReadme.AppendLine($"- **D\u1EF1 \u00E1n**: {safeProjectName}");
+            sbReadme.AppendLine($"- **Th\u1EDDi gian xu\u1EA5t**: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+            sbReadme.AppendLine($"- **T\u1ED5ng s\u1ED1 v\u00F9ng t\u1ECDa \u0111\u1ED9 (Areas)**: {areasExportList.Count}");
+            sbReadme.AppendLine($"- **T\u1ED5ng s\u1ED1 \u1EA3nh c\u1EAFt (Crops)**: {cropsExportList.Count}");
+            sbReadme.AppendLine($"- **K\u00E8m \u1EA3nh g\u1ED1c**: {(exportSources ? "C\u00F3 (trong sources/)" : "Kh\u00F4ng")}");
+            sbReadme.AppendLine();
+            sbReadme.AppendLine("## 1. C\u1EA5u tr\u00FAc th\u01B0 m\u1EE5c");
+            sbReadme.AppendLine("```");
+            sbReadme.AppendLine($"{packageName}/");
+            sbReadme.AppendLine("\u251C\u2500\u2500 README.md        <- T\u00E0i li\u1EC7u h\u01B0\u1EDBng d\u1EABn & m\u00F4 t\u1EA3 d\u1EEF li\u1EC7u");
+            sbReadme.AppendLine("\u251C\u2500\u2500 data.json        <- Danh s\u00E1ch t\u1ECDa \u0111\u1ED9 v\u00E0 th\u00F4ng tin \u1EA3nh (s\u1EAFp x\u1EBFp theo Areas, Crops)");
+            sbReadme.AppendLine("\u2514\u2500\u2500 crops/           <- Th\u01B0 m\u1EE5c ch\u1EE9a to\u00E0n b\u1ED9 \u1EA3nh \u0111\u00E3 c\u1EAFt (PNG)");
+            if (exportSources)
+            {
+                sbReadme.AppendLine("\u2514\u2500\u2500 sources/         <- Th\u01B0 m\u1EE5c ch\u1EE9a c\u00E1c \u1EA3nh g\u1ED1c ban \u0111\u1EA7u (PNG)");
+            }
+            sbReadme.AppendLine("```");
+            sbReadme.AppendLine();
+            sbReadme.AppendLine("## 2. Quy c\u00E1ch t\u1EC7p data.json");
+            sbReadme.AppendLine("T\u1EC7p `data.json` ch\u1EE9a th\u00F4ng tin chi ti\u1EBFt \u0111\u01B0\u1EE3c ph\u00E2n nh\u00F3m r\u00F5 r\u00E0ng theo 2 danh m\u1EE5c:");
+            sbReadme.AppendLine("- **`areas`**: Danh s\u00E1ch c\u00E1c v\u00F9ng t\u1ECDa \u0111\u1ED9 quan t\u00E2m (ROI - Region of Interest).");
+            sbReadme.AppendLine("- **`crops`**: Danh s\u00E1ch c\u00E1c \u0111\u1ED1i t\u01B0\u1EE3ng \u0111\u00E3 \u0111\u01B0\u1EE3c c\u1EAFt ra t\u1EC7p \u1EA3nh trong th\u01B0 m\u1EE5c `crops/`.");
+            sbReadme.AppendLine();
+            sbReadme.AppendLine("### H\u1EC7 t\u1ECDa \u0111\u1ED9:");
+            sbReadme.AppendLine("- G\u1ED1c t\u1ECDa \u0111\u1ED9 `(0, 0)` n\u1EB1m \u1EDF g\u00F3c tr\u00EAn b\u00EAn tr\u00E1i (Top-Left) c\u1EE7a \u1EA3nh ngu\u1ED3n.");
+            sbReadme.AppendLine("- `x`, `y`: T\u1ECDa \u0111\u1ED9 g\u00F3c tr\u00EAn b\u00EAn tr\u00E1i c\u1EE7a khung.");
+            sbReadme.AppendLine("- `width`, `height`: K\u00EDch th\u01B0\u1EDBc pixel chi\u1EC1u r\u1ED9ng v\u00E0 chi\u1EC1u cao.");
+            sbReadme.AppendLine();
+            sbReadme.AppendLine("## 3. C\u00E1ch \u0111\u1ECDc d\u1EEF li\u1EC7u b\u1EB1ng Python");
+            sbReadme.AppendLine("```python");
+            sbReadme.AppendLine("import json");
+            sbReadme.AppendLine();
+            sbReadme.AppendLine("with open('data.json', 'r', encoding='utf-8') as f:");
+            sbReadme.AppendLine("    dataset = json.load(f)");
+            sbReadme.AppendLine();
+            sbReadme.AppendLine("print('Project:', dataset['project_name'])");
+            sbReadme.AppendLine("print('Crops count:', len(dataset['crops']))");
+            sbReadme.AppendLine("for crop in dataset['crops']:");
+            sbReadme.AppendLine("    print(f\"ID {crop['id']}: {crop['name']} -> {crop['relative_path']} ({crop['width']}x{crop['height']})\")");
+            sbReadme.AppendLine("```");
+
+            File.WriteAllText(Path.Combine(exportRoot, "README.md"), sbReadme.ToString(), Encoding.UTF8);
+
+            // -----------------------------------------------------------------
+            // Step 5: Success Prompt
+            // -----------------------------------------------------------------
+            if (showSuccessDialog)
+            {
+                var ask = MessageBox.Show(
+                    $"Xu\u1EA5t g\u00F3i d\u1EEF li\u1EC7u th\u00E0nh c\u00F4ng!\n\n" +
+                    $"Th\u01B0 m\u1EE5c \u0111\u00EDch:\n{exportRoot}\n\n" +
+                    $"\u2022 data.json : T\u1ECDa \u0111\u1ED9 & th\u00F4ng tin \u1EA3nh ({exportedAreas} areas, {exportedCrops} crops)\n" +
+                    $"\u2022 crops/     : {exportedCrops + (exportAreasWithImages ? exportedAreas : 0)} \u1EA3nh \u0111\u1ED1i t\u01B0\u1EE3ng \u0111\u00E3 c\u1EAFt\n" +
+                    (exportSources ? $"\u2022 sources/   : {exportedSources} \u1EA3nh ngu\u1ED3n g\u1ED1c\n" : "") +
+                    $"\u2022 README.md  : T\u00E0i li\u1EC7u m\u00F4 t\u1EA3 c\u1EA5u tr\u00FAc cho AI & ph\u1EA7n m\u1EC1m ngo\u00E0i\n\n" +
+                    $"B\u1EA1n c\u00F3 mu\u1ED1n m\u1EDF th\u01B0 m\u1EE5c v\u1EEBa xu\u1EA5t trong Windows Explorer kh\u00F4ng?",
+                    "Xu\u1EA5t th\u00E0nh c\u00F4ng",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Information);
+
+                if (ask == DialogResult.Yes)
+                {
+                    try
+                    {
+                        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", exportRoot) { UseShellExecute = true });
+                    }
+                    catch { }
                 }
-                catch { }
             }
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Lỗi khi xuất gói dữ liệu: {ex.Message}", "Lỗi xuất", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show($"Lá»—i khi xuáº¥t gÃ³i dá»¯ liá»‡u: {ex.Message}", "Lá»—i xuáº¥t", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
     }
-
     private static string SanitizeFileName(string name)
     {
         var invalid = Path.GetInvalidFileNameChars();
@@ -1291,6 +1865,13 @@ public partial class MainCropperForm : Form
 
         // Skip button columns
         if (colName is "ColEditBtn" or "ColDeleteBtn") return;
+        // Double-click on ColName triggers in-place cell editing!
+        if (colName == "ColName")
+        {
+            dgvSavedRegions.CurrentCell = dgvSavedRegions.Rows[e.RowIndex].Cells[e.ColumnIndex];
+            dgvSavedRegions.BeginEdit(true);
+            return;
+        }
 
         var item = _savedRegions[e.RowIndex];
 
@@ -1324,6 +1905,54 @@ public partial class MainCropperForm : Form
         }
 
         cropped?.Dispose();
+    }
+
+    private void OnSavedGridEditingControlShowing(DataGridViewEditingControlShowingEventArgs e)
+    {
+        if (e.Control is TextBox tb)
+        {
+            tb.BackColor = Color.FromArgb(42, 46, 56);
+            tb.ForeColor = Color.White;
+            tb.BorderStyle = BorderStyle.FixedSingle;
+            tb.Font = new Font("Segoe UI Semibold", 9F);
+        }
+    }
+
+    private void OnSavedGridCellEndEdit(DataGridViewCellEventArgs e)
+    {
+        if (e.RowIndex < 0 || e.RowIndex >= _savedRegions.Count) return;
+        if (e.ColumnIndex < 0 || e.ColumnIndex >= dgvSavedRegions.Columns.Count) return;
+
+        var col = dgvSavedRegions.Columns[e.ColumnIndex];
+        if (col.Name != "ColName") return;
+
+        var item = _savedRegions[e.RowIndex];
+        var cell = dgvSavedRegions.Rows[e.RowIndex].Cells[e.ColumnIndex];
+        string? newName = cell.Value?.ToString()?.Trim();
+
+        if (string.IsNullOrWhiteSpace(newName))
+        {
+            MessageBox.Show("Tên không được để trống!", "Lỗi đổi tên", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            cell.Value = item.Name;
+            return;
+        }
+
+        if (!string.Equals(item.Name, newName, StringComparison.OrdinalIgnoreCase))
+        {
+            // Check for duplicates
+            bool isDuplicate = _savedRegions.Where((r, idx) => idx != e.RowIndex)
+                                           .Any(r => string.Equals(r.Name, newName, StringComparison.OrdinalIgnoreCase));
+            if (isDuplicate)
+            {
+                MessageBox.Show($"Tên '{newName}' đã tồn tại trong danh sách! Vui lòng chọn tên khác.", "Trùng tên", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                cell.Value = item.Name;
+                return;
+            }
+
+            item.Name = newName;
+            _isProjectDirty = true;
+            UpdateAppTitle();
+        }
     }
 
     private void OnSavedGridCellContentClick(DataGridViewCellEventArgs e)
@@ -1511,7 +2140,7 @@ public partial class MainCropperForm : Form
             dgvSavedRegions.Rows[rowIndex].Cells["ColDeleteBtn"].ToolTipText = "Xóa mục này khỏi danh sách";
         }
 
-        lblSavedTitle.Text = $"OBJECT: {_savedRegions.Count} mục";
+        lblSavedTitle.Text = $"Objects ({_savedRegions.Count})";
     }
 
     private void LoadSavedRegions()
@@ -1562,47 +2191,54 @@ public partial class MainCropperForm : Form
     {
         if (_currentProject != null && !string.IsNullOrWhiteSpace(_currentProject.Name))
         {
-            this.Text = $"Screen Cropper Pro - [{_currentProject.Name}]";
+            string dirty = _isProjectDirty ? " *" : "";
+            this.Text = $"Screen Cropper Pro - [{_currentProject.Name}{dirty}]";
         }
         else
         {
-            this.Text = "Screen Cropper Pro - Định vị tọa độ & Cắt ảnh màn hình";
+            string dirty = _isProjectDirty ? " *" : "";
+            this.Text = _isProjectDirty ? $"Screen Cropper Pro - [Chưa lưu dự án]{dirty}" : "Screen Cropper Pro";
         }
     }
 
     private void ShowProjectDialog()
     {
         using var dlg = new ProjectManagementDialog(_dpiScale);
-        if (dlg.ShowDialog(this) == DialogResult.OK)
+        var result = dlg.ShowDialog(this);
+
+        // If the current active project was deleted in the dialog, reset workspace to blank
+        if (_currentProject != null && dlg.DeletedProjectIds.Contains(_currentProject.Id))
         {
-            if (dlg.IsNewProjectRequested)
+            ResetToBlankApp();
+        }
+
+        if (result == DialogResult.OK)
+        {
+            if (dlg.IsNewProjectRequested && !string.IsNullOrWhiteSpace(dlg.NewProjectName))
             {
-                CreateNewProject(dlg.NewProjectName ?? $"Dự án_{DateTime.Now:yyyyMMdd_HHmm}");
+                CreateNewProject(dlg.NewProjectName);
             }
             else if (!string.IsNullOrEmpty(dlg.SelectedProjectPath))
             {
-                OpenProjectFromFile(dlg.SelectedProjectPath);
+                OpenProjectFromFile(dlg.SelectedProjectPath, showMessage: true);
             }
         }
     }
 
-    private void CreateNewProject(string projectName)
+    private void ResetToBlankApp()
     {
-        _currentProject = new ProjectData
-        {
-            Name = projectName,
-            CreatedAt = DateTime.Now,
-            LastModified = DateTime.Now
-        };
+        _activeMediaItem = null;
+        _currentProject = null;
         _currentProjectFilePath = null;
         _savedRegions.Clear();
         RefreshSavedGrid();
+        mediaPanel.ClearItems();
 
         // Reset canvas & crop
         canvas.Image?.Dispose();
         canvas.Image = null;
         lblImageInfo.Text = "Ảnh: Chưa nạp";
-        canvas.ImageOverlayInfo = null;
+        canvas.ImageOverlayInfo = "Chưa nạp ảnh (Kéo & thả ảnh từ Media vào đây)";
         lblCursorInfo.Text = "Chuột: -";
         canvas.SetCropRect(Rectangle.Empty);
         _isUpdatingInputs = true;
@@ -1614,38 +2250,89 @@ public partial class MainCropperForm : Form
 
         _isProjectDirty = false;
         UpdateAppTitle();
-        MessageBox.Show($"Đã tạo dự án mới: '{projectName}'!\nBạn có thể nạp ảnh hoặc dán ảnh vào để bắt đầu làm việc.", "Dự án mới", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        ProjectService.SetLastSessionProjectPath(null);
     }
 
-    private void OpenProjectFromFile(string filePath)
+    private void CreateNewProject(string projectName)
+    {
+        _currentProject = new ProjectData
+        {
+            Name = projectName,
+            IsCustomNamed = true,
+            CreatedAt = DateTime.Now,
+            LastModified = DateTime.Now
+        };
+        _currentProjectFilePath = null;
+        _savedRegions.Clear();
+        RefreshSavedGrid();
+        mediaPanel.ClearItems();
+
+        // Reset canvas & crop
+        canvas.Image?.Dispose();
+        canvas.Image = null;
+        lblImageInfo.Text = "Ảnh: Chưa nạp";
+        canvas.ImageOverlayInfo = "Chưa nạp ảnh (Kéo & thả ảnh từ Media vào đây)";
+        lblCursorInfo.Text = "Chuột: -";
+        canvas.SetCropRect(Rectangle.Empty);
+        _isUpdatingInputs = true;
+        numX.Value = 0;
+        numY.Value = 0;
+        numW.Value = 0;
+        numH.Value = 0;
+        _isUpdatingInputs = false;
+
+        _isProjectDirty = false;
+        UpdateAppTitle();
+        MessageBox.Show($"Đã tạo dự án mới: '{projectName}'!\nBạn có thể nạp ảnh, kéo thả ảnh hoặc dán ảnh vào để bắt đầu làm việc.", "Dự án mới", MessageBoxButtons.OK, MessageBoxIcon.Information);
+    }
+
+    private void OpenProjectFromFile(string filePath, bool showMessage = true)
     {
         try
         {
             var proj = ProjectService.LoadProject(filePath);
             if (proj == null)
             {
-                MessageBox.Show("Không thể đọc tệp dự án đã chọn.", "Lỗi tải dự án", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                if (showMessage)
+                {
+                    MessageBox.Show("Không thể đọc tệp dự án đã chọn.", "Lỗi tải dự án", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
                 return;
             }
 
+            proj.IsCustomNamed = true;
             _currentProject = proj;
             _currentProjectFilePath = filePath;
 
-            // Restore image
+            // Restore media items
+            mediaPanel.ClearItems();
+            if (proj.MediaItems != null && proj.MediaItems.Count > 0)
+            {
+                foreach (var m in proj.MediaItems)
+                {
+                    if (!string.IsNullOrEmpty(m.ImageBase64) && m.Bitmap == null)
+                    {
+                        m.Bitmap = ProjectService.BitmapFromBase64(m.ImageBase64);
+                    }
+                }
+                mediaPanel.SetItems(proj.MediaItems);
+            }
+
+            // Restore main image
             if (!string.IsNullOrEmpty(proj.ImageBase64))
             {
                 var img = ProjectService.ImageFromBase64(proj.ImageBase64);
                 if (img is Bitmap bmp)
                 {
                     SetSourceImage(bmp, proj.Name);
+                    mediaPanel.SetActiveItemByName(proj.Name);
                 }
             }
             else
             {
-                canvas.Image?.Dispose();
                 canvas.Image = null;
                 lblImageInfo.Text = "Ảnh: Chưa nạp";
-                canvas.ImageOverlayInfo = null;
+                canvas.ImageOverlayInfo = "Chưa nạp ảnh (Kéo & thả ảnh từ Media vào đây)";
             }
 
             // Restore saved regions
@@ -1674,29 +2361,38 @@ public partial class MainCropperForm : Form
 
             _isProjectDirty = false;
             UpdateAppTitle();
-            MessageBox.Show($"Đã mở dự án '{proj.Name}' thành công!\nSố vùng tọa độ: {_savedRegions.Count}", "Mở dự án", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Lỗi khi mở dự án: {ex.Message}", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            if (showMessage)
+            {
+                MessageBox.Show($"Lỗi khi mở dự án: {ex.Message}", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
     }
 
     private void SaveCurrentProject()
     {
-        if (_currentProject == null)
+        bool isDefaultOrRandom = _currentProject == null ||
+                                 !_currentProject.IsCustomNamed ||
+                                 string.IsNullOrWhiteSpace(_currentProject.Name) ||
+                                 _currentProject.Name.StartsWith("Dự án_", StringComparison.OrdinalIgnoreCase);
+
+        if (isDefaultOrRandom)
         {
-            using ProjectNameDialog dlg = new("Lưu dự án mới", "Nhập tên cho dự án:", $"Dự án_{DateTime.Now:yyyyMMdd_HHmm}");
+            using ProjectNameDialog dlg = new("Lưu dự án", "Dự án đang dùng tên tạm thời. Vui lòng đặt tên chính thức cho dự án:", "", _currentProject?.Id);
             if (dlg.ShowDialog(this) != DialogResult.OK || string.IsNullOrWhiteSpace(dlg.ProjectName))
             {
                 return;
             }
 
-            _currentProject = new ProjectData
-            {
-                Name = dlg.ProjectName
-            };
+            _currentProject ??= new ProjectData();
+            _currentProject.Name = dlg.ProjectName;
+            _currentProject.IsCustomNamed = true;
         }
+
+        _currentProject ??= new ProjectData();
+        FlushActiveMediaState();
 
         // Capture main capture image & thumbnail if canvas.Image is present
         if (canvas.Image != null)
@@ -1720,6 +2416,21 @@ public partial class MainCropperForm : Form
         _currentProject.CropW = crop.Width;
         _currentProject.CropH = crop.Height;
         _currentProject.LockedAspectRatio = canvas.LockedAspectRatio;
+
+        // Serialize MediaItems
+        _currentProject.MediaItems.Clear();
+        foreach (var m in mediaPanel.Items)
+        {
+            if (m.Bitmap != null && string.IsNullOrEmpty(m.ImageBase64))
+            {
+                m.ImageBase64 = ProjectService.ImageToBase64(m.Bitmap);
+            }
+            if (m.Bitmap != null && string.IsNullOrEmpty(m.ThumbnailBase64))
+            {
+                m.ThumbnailBase64 = ProjectService.GenerateThumbnailBase64(m.Bitmap);
+            }
+            _currentProject.MediaItems.Add(m);
+        }
 
         // Ensure all saved regions have their SourceImageBase64 serialized
         foreach (var r in _savedRegions)
@@ -1749,23 +2460,16 @@ public partial class MainCropperForm : Form
     private void AutoSaveProjectSilently()
     {
         if (!_isProjectDirty) return;
-        if (canvas.Image == null && _savedRegions.Count == 0) return;
+        if (canvas.Image == null && _savedRegions.Count == 0 && mediaPanel.Items.Count == 0) return;
+        if (_currentProject == null || !_currentProject.IsCustomNamed || string.IsNullOrWhiteSpace(_currentProject.Name))
+        {
+            // Do NOT silently auto-save if project hasn't been named yet
+            return;
+        }
 
         try
         {
-            if (_currentProject == null)
-            {
-                string baseName = !string.IsNullOrWhiteSpace(_currentSourceName)
-                    ? _currentSourceName
-                    : $"Dự án_{DateTime.Now:yyyyMMdd_HHmm}";
-                _currentProject = new ProjectData
-                {
-                    Name = baseName,
-                    CreatedAt = DateTime.Now,
-                    LastModified = DateTime.Now
-                };
-            }
-
+            FlushActiveMediaState();
             if (canvas.Image != null)
             {
                 _currentProject.ImageBase64 = ProjectService.ImageToBase64(canvas.Image);
@@ -1787,6 +2491,21 @@ public partial class MainCropperForm : Form
             _currentProject.CropW = crop.Width;
             _currentProject.CropH = crop.Height;
             _currentProject.LockedAspectRatio = canvas.LockedAspectRatio;
+
+            // Serialize MediaItems
+            _currentProject.MediaItems.Clear();
+            foreach (var m in mediaPanel.Items)
+            {
+                if (m.Bitmap != null && string.IsNullOrEmpty(m.ImageBase64))
+                {
+                    m.ImageBase64 = ProjectService.ImageToBase64(m.Bitmap);
+                }
+                if (m.Bitmap != null && string.IsNullOrEmpty(m.ThumbnailBase64))
+                {
+                    m.ThumbnailBase64 = ProjectService.GenerateThumbnailBase64(m.Bitmap);
+                }
+                _currentProject.MediaItems.Add(m);
+            }
 
             foreach (var r in _savedRegions)
             {

@@ -161,17 +161,97 @@ public static class ProjectService
         }
     }
 
+    public static string SanitizeFileName(string name)
+    {
+        var invalids = Path.GetInvalidFileNameChars();
+        string clean = new(name.Select(c => invalids.Contains(c) ? '_' : c).ToArray());
+        return clean.Trim();
+    }
+
+    public static string GetSafeProjectFileName(string projectName)
+    {
+        string safe = SanitizeFileName(projectName);
+        if (string.IsNullOrWhiteSpace(safe))
+        {
+            safe = $"Project_{DateTime.Now:yyyyMMdd_HHmmss}";
+        }
+        return $"{safe}.json";
+    }
+
+    public static bool IsProjectNameExists(string projectName, string? excludeId = null)
+    {
+        if (string.IsNullOrWhiteSpace(projectName)) return false;
+        string trimmed = projectName.Trim();
+        string safeName = SanitizeFileName(trimmed);
+
+        // 1. Check in history
+        var history = GetHistory();
+        if (history.Any(h => (!string.IsNullOrEmpty(excludeId) && h.Id == excludeId)
+            ? false
+            : string.Equals(h.Name?.Trim(), trimmed, StringComparison.OrdinalIgnoreCase)))
+        {
+            return true;
+        }
+
+        // 2. Check files in ProjectsDirectory (.json and .cropperproj)
+        string jsonPath = Path.Combine(ProjectsDirectory, $"{safeName}.json");
+        if (File.Exists(jsonPath))
+        {
+            if (!string.IsNullOrEmpty(excludeId))
+            {
+                var p = LoadProject(jsonPath);
+                if (p != null && p.Id == excludeId) return false;
+            }
+            return true;
+        }
+
+        string oldProjPath = Path.Combine(ProjectsDirectory, $"{safeName}.cropperproj");
+        if (File.Exists(oldProjPath))
+        {
+            if (!string.IsNullOrEmpty(excludeId))
+            {
+                var p = LoadProject(oldProjPath);
+                if (p != null && p.Id == excludeId) return false;
+            }
+            return true;
+        }
+
+        return false;
+    }
+
     public static string SaveProject(ProjectData project, string? filePath = null)
     {
-        string targetPath = filePath ?? Path.Combine(ProjectsDirectory, $"{project.Id}.cropperproj");
+        string? targetPath = filePath;
+        string? oldFilePathToDelete = null;
+
+        if (string.IsNullOrWhiteSpace(targetPath))
+        {
+            targetPath = Path.Combine(ProjectsDirectory, GetSafeProjectFileName(project.Name));
+        }
+        else if (Path.GetExtension(targetPath).Equals(".cropperproj", StringComparison.OrdinalIgnoreCase))
+        {
+            oldFilePathToDelete = targetPath;
+            targetPath = Path.ChangeExtension(targetPath, ".json");
+        }
+
         project.LastModified = DateTime.Now;
 
         string json = JsonSerializer.Serialize(project, JsonOptions);
         File.WriteAllText(targetPath, json);
 
+        // If upgraded from .cropperproj to .json, clean up old file
+        if (oldFilePathToDelete != null && File.Exists(oldFilePathToDelete) && !oldFilePathToDelete.Equals(targetPath, StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                File.Delete(oldFilePathToDelete);
+            }
+            catch { }
+        }
+
         // Update history
         var history = GetHistory();
-        var existing = history.FirstOrDefault(h => h.Id == project.Id || h.FilePath.Equals(targetPath, StringComparison.OrdinalIgnoreCase));
+        var existing = history.FirstOrDefault(h => h.Id == project.Id || h.FilePath.Equals(targetPath, StringComparison.OrdinalIgnoreCase) || (oldFilePathToDelete != null && h.FilePath.Equals(oldFilePathToDelete, StringComparison.OrdinalIgnoreCase)));
         if (existing != null)
         {
             history.Remove(existing);
@@ -189,7 +269,50 @@ public static class ProjectService
         });
 
         SaveHistory(history);
+        SetLastSessionProjectPath(targetPath);
         return targetPath;
+    }
+
+    public static string SessionFilePath => Path.Combine(ProjectsDirectory, "last_session.json");
+
+    public static string? GetLastSessionProjectPath()
+    {
+        try
+        {
+            if (File.Exists(SessionFilePath))
+            {
+                string path = File.ReadAllText(SessionFilePath).Trim();
+                if (!string.IsNullOrEmpty(path) && File.Exists(path))
+                {
+                    return path;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Failed to read last_session.json: {ex.Message}");
+        }
+
+        return null;
+    }
+
+    public static void SetLastSessionProjectPath(string? filePath)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
+            {
+                if (File.Exists(SessionFilePath)) File.Delete(SessionFilePath);
+            }
+            else
+            {
+                File.WriteAllText(SessionFilePath, filePath);
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Failed to write last_session.json: {ex.Message}");
+        }
     }
 
     public static ProjectData? LoadProject(string filePath)
@@ -211,6 +334,7 @@ public static class ProjectService
                     existing.Name = project.Name;
                     SaveHistory(history);
                 }
+                SetLastSessionProjectPath(filePath);
                 return project;
             }
         }
@@ -222,13 +346,81 @@ public static class ProjectService
         return null;
     }
 
-    public static void DeleteFromHistory(string id)
+    public static bool DeleteProject(string id, bool deleteFileOnDisk = true)
     {
         var history = GetHistory();
-        int removed = history.RemoveAll(h => h.Id == id);
-        if (removed > 0)
+        var item = history.FirstOrDefault(h => h.Id == id);
+        string? filePath = item?.FilePath;
+        string? projName = item?.Name;
+
+        if (item != null)
         {
+            history.Remove(item);
             SaveHistory(history);
         }
+
+        if (deleteFileOnDisk)
+        {
+            // 1. Delete by item.FilePath
+            if (!string.IsNullOrEmpty(filePath) && File.Exists(filePath))
+            {
+                try { File.Delete(filePath); } catch { }
+            }
+
+            // 2. Delete by safeName in ProjectsDirectory (.json and .cropperproj)
+            if (!string.IsNullOrWhiteSpace(projName))
+            {
+                string safeName = SanitizeFileName(projName);
+                string jsonPath = Path.Combine(ProjectsDirectory, $"{safeName}.json");
+                if (File.Exists(jsonPath))
+                {
+                    try { File.Delete(jsonPath); } catch { }
+                }
+
+                string oldProjPath = Path.Combine(ProjectsDirectory, $"{safeName}.cropperproj");
+                if (File.Exists(oldProjPath))
+                {
+                    try { File.Delete(oldProjPath); } catch { }
+                }
+            }
+
+            // 3. Delete by id in ProjectsDirectory
+            if (!string.IsNullOrWhiteSpace(id))
+            {
+                string idProjPath = Path.Combine(ProjectsDirectory, $"{id}.cropperproj");
+                if (File.Exists(idProjPath))
+                {
+                    try { File.Delete(idProjPath); } catch { }
+                }
+                string idJsonPath = Path.Combine(ProjectsDirectory, $"{id}.json");
+                if (File.Exists(idJsonPath))
+                {
+                    try { File.Delete(idJsonPath); } catch { }
+                }
+            }
+        }
+
+        // Clean up last session if it pointed to the deleted project or points to a non-existent file
+        try
+        {
+            if (File.Exists(SessionFilePath))
+            {
+                string sessionPath = File.ReadAllText(SessionFilePath).Trim();
+                if (string.IsNullOrEmpty(sessionPath) ||
+                    (!string.IsNullOrEmpty(filePath) && sessionPath.Equals(filePath, StringComparison.OrdinalIgnoreCase)) ||
+                    !File.Exists(sessionPath))
+                {
+                    SetLastSessionProjectPath(null);
+                }
+            }
+        }
+        catch { }
+
+        return true;
+    }
+
+    public static void DeleteFromHistory(string id)
+    {
+        DeleteProject(id, deleteFileOnDisk: true);
     }
 }

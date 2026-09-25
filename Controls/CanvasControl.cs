@@ -25,6 +25,7 @@ public class CanvasControl : UserControl
 {
     private Bitmap? _image;
     private Rectangle _cropRect = new(50, 50, 200, 150);
+    private bool _isDragOver;
 
     // Zoom and Pan
     private float _zoomFactor = 1.0f;
@@ -83,6 +84,49 @@ public class CanvasControl : UserControl
                  ControlStyles.ResizeRedraw, true);
 
         BackColor = Color.FromArgb(20, 22, 28);
+        AllowDrop = true;
+    }
+
+    protected override void OnDragEnter(DragEventArgs drgevent)
+    {
+        base.OnDragEnter(drgevent);
+        if (drgevent.Data != null && (drgevent.Data.GetDataPresent(DataFormats.FileDrop) || drgevent.Data.GetDataPresent(DataFormats.Bitmap)))
+        {
+            _isDragOver = true;
+            Invalidate();
+        }
+    }
+
+    protected override void OnDragLeave(EventArgs e)
+    {
+        base.OnDragLeave(e);
+        if (_isDragOver)
+        {
+            _isDragOver = false;
+            Invalidate();
+        }
+    }
+
+    protected override void OnDragDrop(DragEventArgs drgevent)
+    {
+        base.OnDragDrop(drgevent);
+        _isDragOver = false;
+        Invalidate();
+    }
+
+    public bool IsImageValid()
+    {
+        if (_image == null) return false;
+        try
+        {
+            _ = _image.Width;
+            return true;
+        }
+        catch
+        {
+            _image = null;
+            return false;
+        }
     }
 
     [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
@@ -92,13 +136,13 @@ public class CanvasControl : UserControl
         set
         {
             _image = value;
-            if (_image != null)
+            if (IsImageValid())
             {
                 // Default crop box: center 40% of image
-                int cw = Math.Max(10, (int)(_image.Width * 0.4f));
-                int ch = Math.Max(10, (int)(_image.Height * 0.4f));
-                int cx = (_image.Width - cw) / 2;
-                int cy = (_image.Height - ch) / 2;
+                int cw = Math.Max(10, (int)(_image!.Width * 0.4f));
+                int ch = Math.Max(10, (int)(_image!.Height * 0.4f));
+                int cx = (_image!.Width - cw) / 2;
+                int cy = (_image!.Height - ch) / 2;
                 SetCropRectInternal(new Rectangle(cx, cy, cw, ch), true);
                 FitImageToView();
             }
@@ -114,6 +158,65 @@ public class CanvasControl : UserControl
     }
 
     public float ZoomFactor => _zoomFactor;
+
+    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+    public PointF PanOffset
+    {
+        get => _panOffset;
+        set
+        {
+            _panOffset = value;
+            Invalidate();
+        }
+    }
+
+    public void SetZoomFactor(float factor)
+    {
+        _zoomFactor = Math.Clamp(factor, 0.05f, 20.0f);
+        ZoomChanged?.Invoke(_zoomFactor);
+        Invalidate();
+    }
+
+    public void SetImageWithState(Bitmap? img, Rectangle? cropRect = null, float? zoomFactor = null, PointF? panOffset = null)
+    {
+        _image = img;
+        if (IsImageValid())
+        {
+            if (cropRect.HasValue && cropRect.Value.Width > 0 && cropRect.Value.Height > 0)
+            {
+                SetCropRectInternal(cropRect.Value, true);
+            }
+            else
+            {
+                int cw = Math.Max(10, (int)(_image!.Width * 0.4f));
+                int ch = Math.Max(10, (int)(_image!.Height * 0.4f));
+                int cx = (_image!.Width - cw) / 2;
+                int cy = (_image!.Height - ch) / 2;
+                SetCropRectInternal(new Rectangle(cx, cy, cw, ch), true);
+            }
+
+            if (zoomFactor.HasValue && zoomFactor.Value > 0.05f)
+            {
+                _zoomFactor = Math.Clamp(zoomFactor.Value, 0.05f, 20.0f);
+                if (panOffset.HasValue)
+                {
+                    _panOffset = panOffset.Value;
+                }
+                else
+                {
+                    float imgRenderW = _image!.Width * _zoomFactor;
+                    float imgRenderH = _image!.Height * _zoomFactor;
+                    _panOffset = new PointF((Width - imgRenderW) / 2f, (Height - imgRenderH) / 2f);
+                }
+                ZoomChanged?.Invoke(_zoomFactor);
+            }
+            else
+            {
+                FitImageToView();
+            }
+        }
+        Invalidate();
+    }
 
     public void SetCropRect(Rectangle rect)
     {
@@ -260,7 +363,7 @@ public class CanvasControl : UserControl
             return;
         }
 
-        if (e.Button == MouseButtons.Left && _image != null)
+        if (e.Button == MouseButtons.Left && IsImageValid())
         {
             _activeHandle = HitTestHandle(e.Location);
             _dragStartMouse = e.Location;
@@ -269,7 +372,7 @@ public class CanvasControl : UserControl
             if (_activeHandle == DragHandle.DrawNew)
             {
                 Point imgPt = ScreenToImage(e.Location);
-                int ix = Math.Clamp(imgPt.X, 0, _image.Width - 1);
+                int ix = Math.Clamp(imgPt.X, 0, _image!.Width - 1);
                 int iy = Math.Clamp(imgPt.Y, 0, _image.Height - 1);
                 _dragStartCropRect = new Rectangle(ix, iy, 1, 1);
                 SetCropRectInternal(_dragStartCropRect, true);
@@ -293,26 +396,30 @@ public class CanvasControl : UserControl
         }
 
         // Fire Hover Coordinate event
-        if (_image != null)
+        if (IsImageValid())
         {
-            Point imgPt = ScreenToImage(e.Location);
-            Color? pixelColor = null;
-            if (imgPt.X >= 0 && imgPt.X < _image.Width && imgPt.Y >= 0 && imgPt.Y < _image.Height)
+            try
             {
-                try { pixelColor = _image.GetPixel(imgPt.X, imgPt.Y); } catch { }
+                Point imgPt = ScreenToImage(e.Location);
+                Color? pixelColor = null;
+                if (imgPt.X >= 0 && imgPt.X < _image!.Width && imgPt.Y >= 0 && imgPt.Y < _image.Height)
+                {
+                    try { pixelColor = _image.GetPixel(imgPt.X, imgPt.Y); } catch { }
+                }
+                CursorMovedOnImage?.Invoke(imgPt, pixelColor);
             }
-            CursorMovedOnImage?.Invoke(imgPt, pixelColor);
+            catch { }
         }
 
         // Resizing or Moving Crop Box
-        if (e.Button == MouseButtons.Left && _activeHandle != DragHandle.None && _image != null)
+        if (e.Button == MouseButtons.Left && _activeHandle != DragHandle.None && IsImageValid())
         {
             ProcessCropBoxDrag(e.Location);
             return;
         }
 
         // Update Cursor on Hover (only Invalidate if handle changed to save GDI+ performance)
-        if (_image != null)
+        if (IsImageValid())
         {
             DragHandle newHandle = HitTestHandle(e.Location);
             if (newHandle != _hoverHandle)
@@ -352,7 +459,7 @@ public class CanvasControl : UserControl
 
     private void ProcessCropBoxDrag(Point currentMouse)
     {
-        if (_image == null) return;
+        if (!IsImageValid()) return;
 
         float deltaScreenX = currentMouse.X - _dragStartMouse.X;
         float deltaScreenY = currentMouse.Y - _dragStartMouse.Y;
@@ -360,8 +467,8 @@ public class CanvasControl : UserControl
         int deltaImgX = (int)Math.Round(deltaScreenX / _zoomFactor);
         int deltaImgY = (int)Math.Round(deltaScreenY / _zoomFactor);
 
-        int imgW = _image.Width;
-        int imgH = _image.Height;
+        int imgW = _image!.Width;
+        int imgH = _image!.Height;
 
         Rectangle r = _dragStartCropRect;
 
@@ -629,51 +736,96 @@ public class CanvasControl : UserControl
         // Fill background with dark checker pattern or solid dark
         DrawCheckerBackground(g);
 
-        if (_image == null)
+        if (!IsImageValid())
         {
-            using Font font = new("Segoe UI", 12F, FontStyle.Regular);
-            using SolidBrush brush = new(Color.FromArgb(140, 150, 170));
-            string hint = "Chưa nạp ảnh. Nhấn 'Nạp ảnh', 'Dán Clipboard' (Ctrl+V) hoặc 'Chụp Live' (F9) để bắt đầu";
-            SizeF size = g.MeasureString(hint, font);
-            g.DrawString(hint, font, brush, (Width - size.Width) / 2f, (Height - size.Height) / 2f);
+            if (_isDragOver)
+            {
+                DrawDragOverOverlay(g);
+                return;
+            }
+
+            using Font titleFont = new("Segoe UI Semibold", 12F);
+            using Font subFont = new("Segoe UI", 9.5F);
+            using SolidBrush titleBrush = new(Color.FromArgb(180, 195, 215));
+            using SolidBrush subBrush = new(Color.FromArgb(120, 135, 155));
+
+            string mainHint = "Chưa nạp ảnh";
+            string subHint = "Kéo ảnh từ Media vào đây hoặc nhấn vào ảnh trong Media\n(F9: Chụp Live | Ctrl+V: Dán ảnh)";
+
+            SizeF mainSize = g.MeasureString(mainHint, titleFont);
+            SizeF subSize = g.MeasureString(subHint, subFont);
+
+            float totalH = mainSize.Height + 8 + subSize.Height;
+            float startY = (Height - totalH) / 2f;
+
+            g.DrawString(mainHint, titleFont, titleBrush, (Width - mainSize.Width) / 2f, startY);
+            using StringFormat sf = new() { Alignment = StringAlignment.Center };
+            g.DrawString(subHint, subFont, subBrush, new RectangleF(20, startY + mainSize.Height + 8, Width - 40, subSize.Height + 10), sf);
             return;
         }
 
-        // Set pixel interpolation based on zoom
-        if (_zoomFactor >= 2.0f)
+        try
         {
-            g.InterpolationMode = InterpolationMode.NearestNeighbor;
-            g.PixelOffsetMode = PixelOffsetMode.Half;
+            // Set pixel interpolation based on zoom
+            if (_zoomFactor >= 2.0f)
+            {
+                g.InterpolationMode = InterpolationMode.NearestNeighbor;
+                g.PixelOffsetMode = PixelOffsetMode.Half;
+            }
+            else
+            {
+                g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+            }
+
+            // Render Image
+            float imgScreenW = _image!.Width * _zoomFactor;
+            float imgScreenH = _image!.Height * _zoomFactor;
+            RectangleF imgScreenRect = new(_panOffset.X, _panOffset.Y, imgScreenW, imgScreenH);
+            g.DrawImage(_image!, imgScreenRect);
+
+            // Optional Pixel Grid at extreme zoom
+            if (_zoomFactor >= 8.0f)
+            {
+                DrawPixelGrid(g, imgScreenRect);
+            }
+
+            // Image boundary border
+            using (Pen imgBorderPen = new(Color.FromArgb(80, 255, 255, 255), 1))
+            {
+                g.DrawRectangle(imgBorderPen, imgScreenRect.X, imgScreenRect.Y, imgScreenRect.Width, imgScreenRect.Height);
+            }
+
+            // Draw CapCut-style Crop Box
+            DrawCapCutCropBox(g);
+
+            // Draw Image Info Overlay at bottom-left corner with true GDI+ semi-transparency
+            DrawImageInfoOverlay(g);
         }
-        else
+        catch (Exception ex)
         {
-            g.InterpolationMode = InterpolationMode.HighQualityBicubic;
-            g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+            System.Diagnostics.Debug.WriteLine($"Canvas render error: {ex.Message}");
         }
 
-        // Render Image
-        float imgScreenW = _image.Width * _zoomFactor;
-        float imgScreenH = _image.Height * _zoomFactor;
-        RectangleF imgScreenRect = new(_panOffset.X, _panOffset.Y, imgScreenW, imgScreenH);
-        g.DrawImage(_image, imgScreenRect);
-
-        // Optional Pixel Grid at extreme zoom
-        if (_zoomFactor >= 8.0f)
+        if (_isDragOver)
         {
-            DrawPixelGrid(g, imgScreenRect);
+            DrawDragOverOverlay(g);
         }
+    }
 
-        // Image boundary border
-        using (Pen imgBorderPen = new(Color.FromArgb(80, 255, 255, 255), 1))
-        {
-            g.DrawRectangle(imgBorderPen, imgScreenRect.X, imgScreenRect.Y, imgScreenRect.Width, imgScreenRect.Height);
-        }
+    private void DrawDragOverOverlay(Graphics g)
+    {
+        using SolidBrush overlayBrush = new(Color.FromArgb(70, 0, 168, 255));
+        g.FillRectangle(overlayBrush, 10, 10, Width - 20, Height - 20);
 
-        // Draw CapCut-style Crop Box
-        DrawCapCutCropBox(g);
+        using Pen dashPen = new(Color.FromArgb(0, 220, 255), 2.5f) { DashStyle = DashStyle.Dash };
+        g.DrawRectangle(dashPen, 10, 10, Width - 20, Height - 20);
 
-        // Draw Image Info Overlay at bottom-left corner with true GDI+ semi-transparency
-        DrawImageInfoOverlay(g);
+        using Font dragFont = new("Segoe UI Bold", 13.5F);
+        using SolidBrush textBrush = new(Color.White);
+        string dropText = "Thả ảnh vào đây để nạp vào Main Capture";
+        SizeF textSize = g.MeasureString(dropText, dragFont);
+        g.DrawString(dropText, dragFont, textBrush, (Width - textSize.Width) / 2f, (Height - textSize.Height) / 2f);
     }
 
     private void DrawCheckerBackground(Graphics g)
@@ -837,12 +989,12 @@ public class CanvasControl : UserControl
         using Font font = new("Segoe UI Semibold", 9.5F); // >= 12px
         SizeF textSize = g.MeasureString(_imageOverlayInfo, font);
 
-        float padX = 14;
-        float padY = 6;
+        float padX = 10;
+        float padY = 4;
         float boxW = textSize.Width + padX * 2;
         float boxH = textSize.Height + padY * 2;
-        float boxX = 14;
-        float boxY = Height - boxH - 14;
+        float boxX = 6;
+        float boxY = Height - boxH - 6;
 
         if (boxY < 0 || boxW <= 0 || boxH <= 0) return;
 

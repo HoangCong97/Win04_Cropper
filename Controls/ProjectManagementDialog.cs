@@ -15,6 +15,7 @@ public class ProjectManagementDialog : Form
     public bool IsNewProjectRequested { get; private set; }
     public string? SelectedProjectPath { get; private set; }
     public string? NewProjectName { get; private set; }
+    public List<string> DeletedProjectIds { get; } = new();
 
     private readonly float _dpiScale = 1.0f;
     private int DpiScale(int px) => (int)Math.Round(px * _dpiScale);
@@ -368,9 +369,11 @@ public class ProjectManagementDialog : Form
             btnDelete.FlatAppearance.BorderSize = 0;
             btnDelete.Click += (s, e) =>
             {
-                if (MessageBox.Show($"Bạn có chắc chắn muốn xóa dự án '{item.Name}' khỏi lịch sử?", "Xác nhận", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
+                string fileName = !string.IsNullOrEmpty(item.FilePath) ? Path.GetFileName(item.FilePath) : $"{item.Name}.json";
+                if (MessageBox.Show($"Bạn có chắc chắn muốn xóa vĩnh viễn dự án '{item.Name}' khỏi máy tính?\nTệp dự án '{fileName}' sẽ bị xóa hoàn toàn.", "Xác nhận xóa dự án", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes)
                 {
-                    ProjectService.DeleteFromHistory(item.Id);
+                    ProjectService.DeleteProject(item.Id, deleteFileOnDisk: true);
+                    DeletedProjectIds.Add(item.Id);
                     LoadHistory();
                 }
             };
@@ -398,7 +401,7 @@ public class ProjectManagementDialog : Form
 
     private void HandleCreateNew()
     {
-        using ProjectNameDialog dlg = new("Tạo dự án mới", "Nhập tên cho dự án mới:", $"Dự án_{DateTime.Now:yyyyMMdd_HHmm}");
+        using ProjectNameDialog dlg = new("Tạo dự án mới", "Nhập tên cho dự án mới:", "");
         if (dlg.ShowDialog(this) == DialogResult.OK && !string.IsNullOrWhiteSpace(dlg.ProjectName))
         {
             IsNewProjectRequested = true;
@@ -413,7 +416,7 @@ public class ProjectManagementDialog : Form
         using OpenFileDialog ofd = new()
         {
             Title = "Mở file dự án",
-            Filter = "File dự án Cropper (*.cropperproj;*.json)|*.cropperproj;*.json|Tất cả file (*.*)|*.*",
+            Filter = "File dự án Cropper (*.json;*.cropperproj)|*.json;*.cropperproj|File JSON (*.json)|*.json|File Cropper cũ (*.cropperproj)|*.cropperproj|Tất cả file (*.*)|*.*",
             InitialDirectory = ProjectService.ProjectsDirectory
         };
 

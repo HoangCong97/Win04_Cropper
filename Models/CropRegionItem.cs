@@ -17,7 +17,7 @@ public class CropRegionItem
 
     public CropItemType ItemType { get; set; } = CropItemType.Coordinate;
 
-    public string Name { get; set; } = "Vùng_cắt";
+    public string Name { get; set; } = "Area 1";
 
     public int X { get; set; }
 
