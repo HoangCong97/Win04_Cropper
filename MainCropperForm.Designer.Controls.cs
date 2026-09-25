@@ -45,6 +45,7 @@ partial class MainCropperForm
     private Panel pnlPropertiesContainer = null!;
     private Panel pnlPropertiesHeader = null!;
     private Panel pnlPropertiesBody = null!;
+    private SlimScrollBar scrollBarProperties = null!;
     private IconPictureBox picCoordIcon = null!;
     private Label lblCoordSection = null!;
     private IconButton btnCancelEdit = null!;

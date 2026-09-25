@@ -26,26 +26,17 @@ public partial class MediaPanelControl
         pnlBody.BringToFront();
 
         // Custom ScrollBar (6px width, modern dark look)
-        pnlScrollBar = new Panel
+        pnlScrollBar = new SlimScrollBar(_dpiScale)
         {
             Dock = DockStyle.Right,
             Width = DpiScale(6),
             BackColor = Color.FromArgb(20, 23, 30),
             Visible = false
         };
-        pnlScrollBar.Paint += OnScrollBarPaint;
-        pnlScrollBar.MouseDown += OnScrollBarMouseDown;
-        pnlScrollBar.MouseMove += OnScrollBarMouseMove;
-        pnlScrollBar.MouseUp += OnScrollBarMouseUp;
-        pnlScrollBar.MouseLeave += (s, e) =>
+        pnlScrollBar.ScrollOffsetChanged += (s, offset) =>
         {
-            if (!_isDraggingScrollThumb)
-            {
-                _isThumbHovered = false;
-                pnlScrollBar.Invalidate();
-            }
+            pnlCardsContent.Top = -offset;
         };
-        pnlScrollBar.MouseWheel += OnCardsMouseWheel;
 
         // Cards container (2-column layout, NO native scrollbars)
         pnlCardsContainer = new Panel
@@ -56,14 +47,14 @@ public partial class MediaPanelControl
             Visible = false
         };
         pnlCardsContainer.Resize += (s, e) => LayoutCards();
-        pnlCardsContainer.MouseWheel += OnCardsMouseWheel;
+        pnlCardsContainer.MouseWheel += (s, e) => pnlScrollBar.ScrollBy(-Math.Sign(e.Delta) * DpiScale(48));
 
         pnlCardsContent = new Panel
         {
             Location = new Point(0, 0),
             BackColor = Color.Transparent
         };
-        pnlCardsContent.MouseWheel += OnCardsMouseWheel;
+        pnlCardsContent.MouseWheel += (s, e) => pnlScrollBar.ScrollBy(-Math.Sign(e.Delta) * DpiScale(48));
         pnlCardsContainer.Controls.Add(pnlCardsContent);
 
         pnlBody.Controls.Add(pnlCardsContainer);
@@ -141,9 +132,7 @@ public partial class MediaPanelControl
         int totalContentH = pad + totalRows * (cardH + gap) + pad;
         int viewH = pnlCardsContainer.ClientSize.Height;
 
-        _maxScroll = Math.Max(0, totalContentH - viewH);
-        bool needsScroll = _maxScroll > 0;
-
+        bool needsScroll = totalContentH > viewH;
         if (pnlScrollBar.Visible != needsScroll)
         {
             pnlScrollBar.Visible = needsScroll;
@@ -151,12 +140,11 @@ public partial class MediaPanelControl
             cardW = Math.Max(DpiScale(60), (containerW - pad * 2 - gap) / 2);
             cardH = (int)(cardW * 0.82f) + DpiScale(32);
             totalContentH = pad + totalRows * (cardH + gap) + pad;
-            _maxScroll = Math.Max(0, totalContentH - viewH);
         }
 
         pnlCardsContent.Size = new Size(containerW, Math.Max(viewH, totalContentH));
-        _scrollOffset = Math.Clamp(_scrollOffset, 0, _maxScroll);
-        pnlCardsContent.Top = -_scrollOffset;
+        pnlScrollBar.UpdateScroll(totalContentH, viewH);
+        pnlCardsContent.Top = -pnlScrollBar.ScrollOffset;
 
         for (int i = 0; i < _items.Count; i++)
         {
@@ -289,7 +277,7 @@ public partial class MediaPanelControl
         // Mouse events: Click, DoubleClick, Drag, MouseWheel
         void AttachMouseInteractions(Control c)
         {
-            c.MouseWheel += OnCardsMouseWheel;
+            c.MouseWheel += (s, e) => pnlScrollBar.ScrollBy(-Math.Sign(e.Delta) * DpiScale(48));
             c.MouseDown += (s, e) =>
             {
                 if (e.Button == MouseButtons.Left)

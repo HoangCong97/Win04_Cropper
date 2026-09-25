@@ -369,6 +369,22 @@ public static partial class SelfDiagnosticTests
             toggleTitleMethod!.Invoke(formSort, null);
             if (formSort.SavedRegions[0].Name != "Alpha") throw new Exception("Title toggle sort to Alpha failed");
 
+            // Verify Reusable SlimScrollBar on Properties Panel
+            var scrollBarPropField = typeof(MainCropperForm).GetField("scrollBarProperties", bindingFlags);
+            if (scrollBarPropField?.GetValue(formSort) is Controls.SlimScrollBar scrollBarProps)
+            {
+                scrollBarProps.UpdateScroll(600, 300);
+                if (!scrollBarProps.NeedsScroll) throw new Exception("SlimScrollBar should need scroll when content overflows");
+                if (scrollBarProps.MaxScroll != 300) throw new Exception($"Expected MaxScroll=300, got {scrollBarProps.MaxScroll}");
+                scrollBarProps.ScrollBy(50);
+                if (scrollBarProps.ScrollOffset != 50) throw new Exception($"Expected ScrollOffset=50, got {scrollBarProps.ScrollOffset}");
+                scrollBarProps.ResetScroll();
+                if (scrollBarProps.ScrollOffset != 0) throw new Exception($"Expected ScrollOffset=0, got {scrollBarProps.ScrollOffset}");
+                scrollBarProps.UpdateScroll(200, 300);
+                if (scrollBarProps.NeedsScroll) throw new Exception("SlimScrollBar should not need scroll when content fits");
+                Console.WriteLine("[PASS] Test 15b: Properties panel SlimScrollBar reuse verified.");
+            }
+
             Console.WriteLine("[PASS] Test 15: Object Sorting (Title Click, Column Header) & Flicker-free Splitters verified.");
         }
     }

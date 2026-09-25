@@ -29,16 +29,10 @@ public partial class MediaPanelControl : UserControl
     private Panel pnlEmptyState = null!;
     private Panel pnlCardsContainer = null!;
     private Panel pnlCardsContent = null!;
-    private Panel pnlScrollBar = null!;
+    private SlimScrollBar pnlScrollBar = null!;
     private Panel pnlDragGhost = null!;
 
-    // Custom scroll state
-    private int _scrollOffset;
-    private int _maxScroll;
-    private bool _isDraggingScrollThumb;
-    private int _dragStartY;
-    private int _dragStartScrollOffset;
-    private bool _isThumbHovered;
+    public int ScrollOffset => pnlScrollBar.ScrollOffset;
 
     // Drag-out state
     private Point _mouseDownLocation;
@@ -300,7 +294,7 @@ public partial class MediaPanelControl : UserControl
         }
         _items.Clear();
         _activeItem = null;
-        _scrollOffset = 0;
+        pnlScrollBar?.ResetScroll();
         UpdateView();
     }
 

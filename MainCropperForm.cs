@@ -48,7 +48,7 @@ public partial class MainCropperForm : Form
         _currentSourceName = name;
     }
 
-    internal static string GenerateDefaultProjectName() => $"Dá»± Ã¡n_{DateTime.Now:yyyyMMdd_HHmm}";
+    internal static string GenerateDefaultProjectName() => $"Dự án_{DateTime.Now:yyyyMMdd_HHmm}";
 
     protected override CreateParams CreateParams
     {
@@ -109,7 +109,7 @@ public partial class MainCropperForm : Form
         mediaPanel.ImportRequested += () => OpenImageFromFile();
         mediaPanel.PasteRequested += () => PasteFromClipboard();
         mediaPanel.FilesDropped += files => ImportFilesToMedia(files, setAsMain: true);
-        mediaPanel.BitmapDropped += bmp => ImportBitmapToMedia(bmp, $"KÃ©o_tháº£_{DateTime.Now:yyyyMMdd_HHmmss}", setAsMain: true);
+        mediaPanel.BitmapDropped += bmp => ImportBitmapToMedia(bmp, $"Kéo_thả_{DateTime.Now:yyyyMMdd_HHmmss}", setAsMain: true);
         mediaPanel.MediaDeleted += OnMediaItemDeleted;
 
         // Initialize default project as blank

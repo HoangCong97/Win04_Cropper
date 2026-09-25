@@ -28,7 +28,7 @@ public partial class ProjectManagementDialog : Form
     {
         _dpiScale = dpiScale > 0 ? dpiScale : 1.0f;
 
-        this.Text = "Quáº£n lÃ½ Dá»± Ã¡n - Screen Cropper Pro";
+        this.Text = "Quản lý Dự án - Screen Cropper Pro";
         this.Size = new Size(DpiScale(780), DpiScale(580));
         this.MinimumSize = new Size(DpiScale(650), DpiScale(480));
         this.StartPosition = FormStartPosition.CenterParent;
@@ -71,7 +71,7 @@ public partial class ProjectManagementDialog : Form
 
         Label lblTitle = new()
         {
-            Text = "QUáº¢N LÃ Dá»° ÃN",
+            Text = "QUẢN LÝ DỰ ÁN",
             UseMnemonic = false,
             Font = new Font("Segoe UI Bold", 11F),
             ForeColor = Color.White,
@@ -82,7 +82,7 @@ public partial class ProjectManagementDialog : Form
 
         Label lblSubtitle = new()
         {
-            Text = "Táº¡o dá»± Ã¡n má»›i, má»Ÿ file cÃ³ sáºµn hoáº·c chá»n tiáº¿p tá»¥c tá»« lá»‹ch sá»­",
+            Text = "Tạo dự án mới, mở file có sẵn hoặc chọn tiếp tục từ lịch sử",
             UseMnemonic = false,
             Font = new Font("Segoe UI", 9F),
             ForeColor = Color.FromArgb(170, 185, 205),
@@ -92,7 +92,7 @@ public partial class ProjectManagementDialog : Form
         pnlHeader.Controls.Add(lblSubtitle);
 
         // ---------------------------------------------------------
-        // Action Bar (Táº¡o má»›i, Má»Ÿ file, TÃ¬m kiáº¿m)
+        // Action Bar (Tạo mới, Mở file, Tìm kiếm)
         // ---------------------------------------------------------
         Panel pnlActionBar = new()
         {
@@ -106,7 +106,7 @@ public partial class ProjectManagementDialog : Form
 
         IconButton btnCreateNew = new()
         {
-            Text = " Táº¡o dá»± Ã¡n má»›i",
+            Text = " Tạo dự án mới",
             UseMnemonic = false,
             IconChar = IconChar.Plus,
             IconColor = Color.White,
@@ -129,7 +129,7 @@ public partial class ProjectManagementDialog : Form
 
         IconButton btnOpenExisting = new()
         {
-            Text = " Má»Ÿ dá»± Ã¡n cÃ³ sáºµn...",
+            Text = " Mở dự án có sẵn...",
             UseMnemonic = false,
             IconChar = IconChar.FolderOpen,
             IconColor = Color.White,
@@ -160,7 +160,7 @@ public partial class ProjectManagementDialog : Form
             ForeColor = Color.White,
             BorderStyle = BorderStyle.FixedSingle,
             Font = new Font("Segoe UI", 9F),
-            PlaceholderText = "TÃ¬m dá»± Ã¡n..."
+            PlaceholderText = "Tìm dự án..."
         };
         txtSearch.TextChanged += (s, e) => RenderHistoryItems();
         pnlActionBar.Controls.Add(txtSearch);
@@ -179,7 +179,7 @@ public partial class ProjectManagementDialog : Form
 
         Button btnClose = new()
         {
-            Text = "ÄÃ³ng",
+            Text = "Đóng",
             Dock = DockStyle.Right,
             Width = DpiScale(90),
             BackColor = Color.FromArgb(50, 55, 68),
@@ -206,7 +206,7 @@ public partial class ProjectManagementDialog : Form
 
         Label lblHistoryTitle = new()
         {
-            Text = "Lá»ŠCH Sá»¬ CÃC Dá»° ÃN",
+            Text = "LỊCH SỬ CÁC DỰ ÁN",
             UseMnemonic = false,
             Font = new Font("Segoe UI Bold", 9.5F),
             ForeColor = Color.FromArgb(170, 185, 205),

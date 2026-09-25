@@ -1,4 +1,4 @@
-#nullable enable
+﻿#nullable enable
 using System.Drawing;
 using System.Windows.Forms;
 using FontAwesome.Sharp;
@@ -38,7 +38,7 @@ partial class MainCropperForm
         // -------------------------------------------------------------
         // Main Form Properties
         // -------------------------------------------------------------
-        this.Text = "Screen Cropper Pro - Äá»‹nh vá»‹ tá»a Ä‘á»™ & Cáº¯t áº£nh mÃ n hÃ¬nh";
+        this.Text = "Screen Cropper Pro - Định vị tọa độ & Cắt ảnh màn hình";
         this.Size = new Size(DpiScale(1400), DpiScale(880));
         this.MinimumSize = new Size(DpiScale(1020), DpiScale(680));
         this.BackColor = Color.FromArgb(32, 35, 42);
@@ -119,19 +119,19 @@ partial class MainCropperForm
         };
         pnlHeader.Controls.Add(pnlHeaderButtons);
 
-        btnProject = CreateHeaderButton("Dá»± Ã¡n", IconChar.FolderTree, Color.FromArgb(0, 122, 204));
+        btnProject = CreateHeaderButton("Dự án", IconChar.FolderTree, Color.FromArgb(0, 122, 204));
         btnProject.Click += (s, e) => ShowProjectDialog();
         pnlHeaderButtons.Controls.Add(btnProject);
 
-        btnLiveCapture = CreateHeaderButton("Chá»¥p Live (F9)", IconChar.Camera, Color.FromArgb(0, 168, 150));
+        btnLiveCapture = CreateHeaderButton("Chụp Live (F9)", IconChar.Camera, Color.FromArgb(0, 168, 150));
         btnLiveCapture.Click += async (s, e) => await TriggerLiveCaptureAsync();
         pnlHeaderButtons.Controls.Add(btnLiveCapture);
 
-        btnWindowCapture = CreateHeaderButton("Cá»­a sá»• khÃ¡c", IconChar.WindowRestore);
+        btnWindowCapture = CreateHeaderButton("Cửa sổ khác", IconChar.WindowRestore);
         btnWindowCapture.Click += async (s, e) => await TriggerWindowCaptureAsync();
         pnlHeaderButtons.Controls.Add(btnWindowCapture);
 
-        btnFitView = CreateHeaderButton("Vá»«a khung", IconChar.Expand);
+        btnFitView = CreateHeaderButton("Vừa khung", IconChar.Expand);
         btnFitView.Click += (s, e) => canvas.FitImageToView();
         pnlHeaderButtons.Controls.Add(btnFitView);
 
@@ -151,7 +151,7 @@ partial class MainCropperForm
         };
         pnlHeader.Controls.Add(pnlHeaderStatus);
 
-        btnSaveProject = CreateHeaderButton("LÆ°u dá»± Ã¡n", IconChar.FloppyDisk, Color.FromArgb(16, 185, 129));
+        btnSaveProject = CreateHeaderButton("Lưu dự án", IconChar.FloppyDisk, Color.FromArgb(16, 185, 129));
         btnSaveProject.Click += (s, e) => SaveCurrentProject();
         pnlHeaderStatus.Controls.Add(btnSaveProject);
 
@@ -252,13 +252,13 @@ partial class MainCropperForm
             BackColor = Color.Transparent,
             Cursor = Cursors.Hand
         };
-        tipActions.SetToolTip(picCanvasGuide, "LÄƒn chuá»™t: Zoom | Chuá»™t giá»¯a/Pháº£i: Pan | KÃ©o cáº¡nh/gÃ³c: Resize");
+        tipActions.SetToolTip(picCanvasGuide, "Lăn chuột: Zoom | Chuột giữa/Phải: Pan | Kéo cạnh/góc: Resize");
         pnlCanvasHeader.Controls.Add(picCanvasGuide);
 
         // Right side: Mouse coordinates
         lblCursorInfo = new Label
         {
-            Text = "Chuá»™t: -",
+            Text = "Chuột: -",
             ForeColor = Color.FromArgb(200, 215, 235),
             Font = new Font("Segoe UI", 9.5F),
             Dock = DockStyle.Right,
@@ -346,7 +346,7 @@ partial class MainCropperForm
         pnlCanvasContainer.Controls.Add(pnlCanvasHeader);
 
         lblImageInfo = new Label { Visible = false };
-        canvas.ImageOverlayInfo = "ChÆ°a náº¡p áº£nh (KÃ©o & tháº£ áº£nh vÃ o Ä‘Ã¢y)";
+        canvas.ImageOverlayInfo = "Chưa nạp ảnh (Kéo & thả ảnh vào đây)";
 
         splitMediaCanvas = new LiveSplitContainer
         {

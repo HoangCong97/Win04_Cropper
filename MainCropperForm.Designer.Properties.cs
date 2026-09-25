@@ -2,6 +2,7 @@
 using System.Drawing;
 using System.Windows.Forms;
 using FontAwesome.Sharp;
+using Win04_Cropper.Controls;
 
 namespace Win04_Cropper;
 
@@ -150,20 +151,30 @@ partial class MainCropperForm
         // -------------------------------------------------------------
         // Scrollable body (Between Header and Bottom Actions)
         // -------------------------------------------------------------
+        scrollBarProperties = new SlimScrollBar(_dpiScale)
+        {
+            Dock = DockStyle.Right,
+            Width = DpiScale(6),
+            BackColor = Color.FromArgb(20, 23, 30),
+            Visible = false
+        };
+
         pnlPropertiesBody = new Panel
         {
             Dock = DockStyle.Fill,
-            AutoScroll = true,
+            AutoScroll = false,
             BackColor = Color.FromArgb(32, 35, 42),
-            Padding = new Padding(DpiScale(8), DpiScale(6), DpiScale(8), DpiScale(6))
+            Padding = Padding.Empty
         };
+
         pnlPropertiesContainer.Controls.Add(pnlPropertiesBody);
+        pnlPropertiesContainer.Controls.Add(scrollBarProperties);
         pnlPropertiesHeader.SendToBack();
         pnlPropertiesActions.SendToBack();
 
         TableLayoutPanel tlpCards = new()
         {
-            Dock = DockStyle.Top,
+            Dock = DockStyle.None,
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
             ColumnCount = 1,
@@ -368,5 +379,8 @@ partial class MainCropperForm
 
         // CARD 2: BỘ LỌC HÌNH ẢNH
         BuildFiltersCard(tlpCards);
+
+        // Bind reusable slim scrollbar to properties body and cards
+        scrollBarProperties.Bind(pnlPropertiesBody, tlpCards, horizontalPadding: DpiScale(8), topPadding: DpiScale(6));
     }
 }
