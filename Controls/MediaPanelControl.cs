@@ -17,6 +17,13 @@ public partial class MediaPanelControl : UserControl
     private readonly float _dpiScale = 1.0f;
     private int DpiScale(int px) => (int)Math.Round(px * _dpiScale);
 
+    /// <summary>
+    /// Set to true during window move/resize to skip expensive layout operations.
+    /// </summary>
+    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+    [System.ComponentModel.Browsable(false)]
+    public bool IsWindowResizing { get; set; }
+
     // UI Controls
     private Panel pnlHeader = null!;
     private IconPictureBox picIcon = null!;

@@ -8,6 +8,10 @@ namespace Win04_Cropper.Controls;
 
 public partial class CanvasControl
 {
+    // Cached checker background tile (painted once, tiled thereafter)
+    private Bitmap? _checkerTile;
+    private TextureBrush? _checkerBrush;
+
     #region Rendering
 
     protected override void OnPaint(PaintEventArgs e)
@@ -15,7 +19,27 @@ public partial class CanvasControl
         base.OnPaint(e);
         Graphics g = e.Graphics;
 
-        // Fill background with dark checker pattern or solid dark
+        // During window resize, use ultra-lightweight rendering
+        if (_isWindowResizing)
+        {
+            g.Clear(Color.FromArgb(18, 20, 26));
+            if (IsImageValid())
+            {
+                // Draw a low-quality preview quickly
+                g.InterpolationMode = InterpolationMode.Low;
+                g.PixelOffsetMode = PixelOffsetMode.HighSpeed;
+                g.CompositingQuality = CompositingQuality.HighSpeed;
+                g.SmoothingMode = SmoothingMode.HighSpeed;
+
+                float imgScreenW = _image!.Width * _zoomFactor;
+                float imgScreenH = _image!.Height * _zoomFactor;
+                RectangleF imgScreenRect = new(_panOffset.X, _panOffset.Y, imgScreenW, imgScreenH);
+                g.DrawImage(_image!, imgScreenRect);
+            }
+            return;
+        }
+
+        // Fill background with cached checker pattern
         DrawCheckerBackground(g);
 
         if (!IsImageValid())
@@ -110,23 +134,28 @@ public partial class CanvasControl
         g.DrawString(dropText, dragFont, textBrush, (Width - textSize.Width) / 2f, (Height - textSize.Height) / 2f);
     }
 
+    private void EnsureCheckerTile()
+    {
+        if (_checkerTile != null) return;
+
+        // Create a 48x48 tile (2x2 checker cells of 24px each) once
+        const int gridSize = 24;
+        _checkerTile = new Bitmap(gridSize * 2, gridSize * 2);
+        using (Graphics tg = Graphics.FromImage(_checkerTile))
+        {
+            tg.Clear(Color.FromArgb(18, 20, 26));
+            using SolidBrush dotBrush = new(Color.FromArgb(28, 32, 42));
+            tg.FillRectangle(dotBrush, 0, 0, gridSize, gridSize);
+            tg.FillRectangle(dotBrush, gridSize, gridSize, gridSize, gridSize);
+        }
+        _checkerBrush?.Dispose();
+        _checkerBrush = new TextureBrush(_checkerTile, System.Drawing.Drawing2D.WrapMode.Tile);
+    }
+
     private void DrawCheckerBackground(Graphics g)
     {
-        g.Clear(Color.FromArgb(18, 20, 26));
-
-        // Subtle dot grid or checkered tiles
-        int gridSize = 24;
-        using SolidBrush dotBrush = new(Color.FromArgb(28, 32, 42));
-        for (int y = 0; y < Height; y += gridSize)
-        {
-            for (int x = 0; x < Width; x += gridSize)
-            {
-                if ((x / gridSize + y / gridSize) % 2 == 0)
-                {
-                    g.FillRectangle(dotBrush, x, y, gridSize, gridSize);
-                }
-            }
-        }
+        EnsureCheckerTile();
+        g.FillRectangle(_checkerBrush!, ClientRectangle);
     }
 
     private void DrawPixelGrid(Graphics g, RectangleF imgScreenRect)

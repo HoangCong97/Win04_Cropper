@@ -1,4 +1,4 @@
-﻿#nullable enable
+#nullable enable
 using System.Drawing;
 using System.Windows.Forms;
 using FontAwesome.Sharp;
@@ -338,7 +338,6 @@ partial class MainCropperForm
             }
         }
         pnlCanvasHeader.Resize += (s, e) => CenterCanvasZoom();
-        pnlCanvasHeader.Layout += (s, e) => CenterCanvasZoom();
         CenterCanvasZoom();
 
         canvas = new CanvasControl { Dock = DockStyle.Fill };

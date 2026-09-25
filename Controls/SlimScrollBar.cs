@@ -234,26 +234,36 @@ public class SlimScrollBar : Control
     {
         viewport.AutoScroll = false;
         content.Dock = DockStyle.None;
+        bool _isUpdatingLayout = false;
 
         void UpdateLayout()
         {
-            if (viewport.ClientSize.Width <= 0 || viewport.ClientSize.Height <= 0) return;
-
-            int targetW = Math.Max(DpiScale(50), viewport.ClientSize.Width - horizontalPadding * 2);
-            if (content.Width != targetW)
+            if (_isUpdatingLayout) return;
+            _isUpdatingLayout = true;
+            try
             {
-                content.Width = targetW;
+                if (viewport.ClientSize.Width <= 0 || viewport.ClientSize.Height <= 0) return;
+
+                int targetW = Math.Max(DpiScale(50), viewport.ClientSize.Width - horizontalPadding * 2);
+                if (content.Width != targetW)
+                {
+                    content.Width = targetW;
+                }
+
+                int contentH = content.PreferredSize.Height > 0
+                    ? Math.Max(content.Height, content.PreferredSize.Height)
+                    : content.Height;
+                contentH += topPadding * 2;
+                int viewH = viewport.ClientSize.Height;
+
+                UpdateScroll(contentH, viewH);
+
+                content.Location = new Point(horizontalPadding, topPadding - _scrollOffset);
             }
-
-            int contentH = content.PreferredSize.Height > 0
-                ? Math.Max(content.Height, content.PreferredSize.Height)
-                : content.Height;
-            contentH += topPadding * 2;
-            int viewH = viewport.ClientSize.Height;
-
-            UpdateScroll(contentH, viewH);
-
-            content.Location = new Point(horizontalPadding, topPadding - _scrollOffset);
+            finally
+            {
+                _isUpdatingLayout = false;
+            }
         }
 
         this.ScrollOffsetChanged += (s, offset) =>

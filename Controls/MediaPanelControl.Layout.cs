@@ -46,7 +46,7 @@ public partial class MediaPanelControl
             BackColor = Color.Transparent,
             Visible = false
         };
-        pnlCardsContainer.Resize += (s, e) => LayoutCards();
+        pnlCardsContainer.Resize += (s, e) => { if (!IsWindowResizing) LayoutCards(); };
         pnlCardsContainer.MouseWheel += (s, e) => pnlScrollBar.ScrollBy(-Math.Sign(e.Delta) * DpiScale(48));
 
         pnlCardsContent = new Panel

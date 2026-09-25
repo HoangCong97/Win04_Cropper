@@ -10,6 +10,25 @@ public partial class CanvasControl : UserControl
     private Bitmap? _image;
     private Rectangle _cropRect = new(50, 50, 200, 150);
     private bool _isDragOver;
+    private bool _isWindowResizing;
+
+    /// <summary>
+    /// Set to true during window move/resize to skip expensive rendering.
+    /// </summary>
+    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+    [System.ComponentModel.Browsable(false)]
+    public bool IsWindowResizing
+    {
+        get => _isWindowResizing;
+        set
+        {
+            if (_isWindowResizing != value)
+            {
+                _isWindowResizing = value;
+                if (!value) Invalidate();
+            }
+        }
+    }
 
     // Zoom and Pan
     private float _zoomFactor = 1.0f;
@@ -64,11 +83,31 @@ public partial class CanvasControl : UserControl
         DoubleBuffered = true;
         SetStyle(ControlStyles.AllPaintingInWmPaint |
                  ControlStyles.UserPaint |
-                 ControlStyles.OptimizedDoubleBuffer |
-                 ControlStyles.ResizeRedraw, true);
+                 ControlStyles.OptimizedDoubleBuffer, true);
 
         BackColor = Color.FromArgb(20, 22, 28);
         AllowDrop = true;
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            _checkerBrush?.Dispose();
+            _checkerBrush = null;
+            _checkerTile?.Dispose();
+            _checkerTile = null;
+        }
+        base.Dispose(disposing);
+    }
+
+    protected override void OnResize(EventArgs e)
+    {
+        base.OnResize(e);
+        if (!_isWindowResizing)
+        {
+            Invalidate();
+        }
     }
 
     protected override void OnDragEnter(DragEventArgs drgevent)

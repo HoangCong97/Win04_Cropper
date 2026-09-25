@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Imaging;
@@ -34,6 +34,7 @@ public partial class MainCropperForm : Form
     private string _currentSourceName = "";
     private readonly System.Windows.Forms.Timer _autoSaveTimer = new();
     private bool _isProjectDirty;
+    private bool _isResizingWindow;
     private MediaItem? _activeMediaItem;
     private Bitmap? _currentFilteredBitmap;
     private string _currentSortColumn = "ColCreated";
@@ -242,11 +243,18 @@ public partial class MainCropperForm : Form
         switch (m.Msg)
         {
             case WM_ENTERSIZEMOVE:
+                _isResizingWindow = true;
+                canvas.IsWindowResizing = true;
+                mediaPanel.IsWindowResizing = true;
                 this.SuspendLayout();
                 break;
             case WM_EXITSIZEMOVE:
+                _isResizingWindow = false;
                 this.ResumeLayout(true);
-                this.Invalidate(true);
+                canvas.IsWindowResizing = false;
+                mediaPanel.IsWindowResizing = false;
+                canvas.Invalidate();
+                mediaPanel.UpdateView();
                 break;
         }
 
