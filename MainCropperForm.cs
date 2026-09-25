@@ -25,6 +25,9 @@ public partial class MainCropperForm : Form
     private readonly List<CropRegionItem> _savedRegions = new();
     private bool _isUpdatingInputs;
     private CropRegionItem? _currentlyEditingItem;
+    private readonly List<Button> _ratioButtons = [];
+    private ProjectData? _currentProject;
+    private string? _currentProjectFilePath;
 
     internal DataGridView SavedGrid => dgvSavedRegions;
 
@@ -33,10 +36,14 @@ public partial class MainCropperForm : Form
         InitializeComponent();
 
         int gridIconSize = Math.Max(12, DpiScale(14));
-        _editIconBmp = FormsIconHelper.ToBitmap(IconChar.PenToSquare, Color.FromArgb(0, 200, 240), gridIconSize);
+        _editIconBmp = FormsIconHelper.ToBitmap(IconChar.PenToSquare, Color.White, gridIconSize);
         _deleteIconBmp = FormsIconHelper.ToBitmap(IconChar.TrashCan, Color.FromArgb(255, 120, 130), gridIconSize);
-        _coordIconBmp = FormsIconHelper.ToBitmap(IconChar.LocationDot, Color.FromArgb(0, 215, 255), gridIconSize);
+        _coordIconBmp = FormsIconHelper.ToBitmap(IconChar.LocationDot, Color.White, gridIconSize);
         _imageIconBmp = FormsIconHelper.ToBitmap(IconChar.Image, Color.FromArgb(50, 220, 150), gridIconSize);
+
+        // Ratio buttons collection
+        _ratioButtons.AddRange([btnRatio1x1, btnRatio3x4, btnRatio4x6, btnRatio9x16, btnRatioFree, btnRatio4x3, btnRatio6x4, btnRatio16x9]);
+        SetActiveRatioButton(btnRatioFree);
 
         // Canvas events
         canvas.CropRectChanged += OnCanvasCropRectChanged;
@@ -54,7 +61,7 @@ public partial class MainCropperForm : Form
                 }
                 if (splitTop.Width > 100)
                 {
-                    splitTop.SplitterDistance = Math.Clamp(splitTop.Width - DpiScale(320), 200, splitTop.Width - 100);
+                    splitTop.SplitterDistance = Math.Clamp(splitTop.Width - DpiScale(360), DpiScale(250), splitTop.Width - DpiScale(350));
                 }
             }
             catch { }
@@ -110,6 +117,20 @@ public partial class MainCropperForm : Form
         }
     }
 
+    protected override void OnShown(EventArgs e)
+    {
+        base.OnShown(e);
+        try
+        {
+            if (splitTop.Width > 0)
+            {
+                int desiredPropsWidth = DpiScale(370);
+                splitTop.SplitterDistance = Math.Clamp(splitTop.Width - desiredPropsWidth, splitTop.Panel1MinSize, Math.Max(splitTop.Panel1MinSize, splitTop.Width - splitTop.Panel2MinSize));
+            }
+        }
+        catch { }
+    }
+
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
         base.OnFormClosing(e);
@@ -161,6 +182,20 @@ public partial class MainCropperForm : Form
             return true;
         }
 
+        // Ctrl+Shift+P: Manage Projects
+        if (keyData == (Keys.Control | Keys.Shift | Keys.P))
+        {
+            ShowProjectDialog();
+            return true;
+        }
+
+        // Ctrl+Alt+S: Save Project
+        if (keyData == (Keys.Control | Keys.Alt | Keys.S))
+        {
+            SaveCurrentProject();
+            return true;
+        }
+
         // Ctrl+V: Paste from clipboard
         if (keyData == (Keys.Control | Keys.V))
         {
@@ -172,6 +207,13 @@ public partial class MainCropperForm : Form
         if (keyData == (Keys.Control | Keys.S))
         {
             CropAndSaveImage();
+            return true;
+        }
+
+        // Ctrl+Shift+S or Ctrl+D: Save coordinates
+        if (keyData == (Keys.Control | Keys.Shift | Keys.S) || keyData == (Keys.Control | Keys.D))
+        {
+            SaveCurrentCoordinates();
             return true;
         }
 
@@ -189,19 +231,23 @@ public partial class MainCropperForm : Form
             return true;
         }
 
-        // Arrow keys nudge when not focusing inputs
-        if (!numX.Focused && !numY.Focused && !numW.Focused && !numH.Focused && !dgvSavedRegions.Focused)
+        // Arrow keys nudge when not focusing inputs or grid
+        Keys keyCode = keyData & Keys.KeyCode;
+        if (keyCode is Keys.Left or Keys.Right or Keys.Up or Keys.Down)
         {
-            int step = GetNudgeStep();
-            if ((keyData & Keys.Shift) == Keys.Shift) step *= 5;
-
-            Keys key = keyData & Keys.KeyCode;
-            switch (key)
+            if (!numX.Focused && !numY.Focused && !numW.Focused && !numH.Focused && !dgvSavedRegions.Focused)
             {
-                case Keys.Left: NudgeCrop(-step, 0); return true;
-                case Keys.Right: NudgeCrop(step, 0); return true;
-                case Keys.Up: NudgeCrop(0, -step); return true;
-                case Keys.Down: NudgeCrop(0, step); return true;
+                int step = 10;
+                if ((keyData & Keys.Control) == Keys.Control) step = 1;
+                else if ((keyData & Keys.Shift) == Keys.Shift) step = 50;
+
+                switch (keyCode)
+                {
+                    case Keys.Left: NudgeCrop(-step, 0); return true;
+                    case Keys.Right: NudgeCrop(step, 0); return true;
+                    case Keys.Up: NudgeCrop(0, -step); return true;
+                    case Keys.Down: NudgeCrop(0, step); return true;
+                }
             }
         }
 
@@ -278,7 +324,7 @@ public partial class MainCropperForm : Form
 
     private async Task TriggerLiveCaptureAsync()
     {
-        btnLiveCapture.Text = "⏳ Đang chụp...";
+        btnLiveCapture.Text = " Đang chụp...";
         btnLiveCapture.Enabled = false;
 
         try
@@ -292,14 +338,14 @@ public partial class MainCropperForm : Form
         }
         finally
         {
-            btnLiveCapture.Text = "📸 Chụp Live (F9)";
+            btnLiveCapture.Text = " Chụp Live (F9)";
             btnLiveCapture.Enabled = true;
         }
     }
 
     private async Task TriggerWindowCaptureAsync()
     {
-        btnWindowCapture.Text = "⏳ Chụp cửa sổ...";
+        btnWindowCapture.Text = " Đang chụp...";
         btnWindowCapture.Enabled = false;
 
         try
@@ -312,7 +358,7 @@ public partial class MainCropperForm : Form
         }
         finally
         {
-            btnWindowCapture.Text = "🪟 Cửa sổ khác";
+            btnWindowCapture.Text = " Cửa sổ khác";
             btnWindowCapture.Enabled = true;
         }
     }
@@ -332,6 +378,12 @@ public partial class MainCropperForm : Form
 
         // Sync initial crop
         UpdateInputsFromCropRect(canvas.CropRect);
+
+        if (_currentProject == null)
+        {
+            _currentProject = new ProjectData { Name = sourceName };
+            UpdateAppTitle();
+        }
     }
 
     #endregion
@@ -349,7 +401,7 @@ public partial class MainCropperForm : Form
     {
         if (canvas.Image == null)
         {
-            lblCursorInfo.Text = "Tọa độ chuột: -";
+            lblCursorInfo.Text = "Chuột: -";
             return;
         }
 
@@ -381,7 +433,10 @@ public partial class MainCropperForm : Form
             numW.Value = Math.Clamp(rect.Width, numW.Minimum, numW.Maximum);
             numH.Value = Math.Clamp(rect.Height, numH.Minimum, numH.Maximum);
 
-            lblAspectRatio.Text = $"Tỉ lệ: {GetRatioStr(rect.Width, rect.Height)}";
+            if (lblAspectRatio != null)
+            {
+                lblAspectRatio.Text = $"Tỉ lệ: {GetRatioStr(rect.Width, rect.Height)}";
+            }
         }
         finally
         {
@@ -393,9 +448,140 @@ public partial class MainCropperForm : Form
     {
         if (_isUpdatingInputs || canvas.Image == null) return;
 
-        Rectangle newRect = new((int)numX.Value, (int)numY.Value, (int)numW.Value, (int)numH.Value);
+        int newX = (int)numX.Value;
+        int newY = (int)numY.Value;
+        int newW = (int)numW.Value;
+        int newH = (int)numH.Value;
+
+        if (canvas.LockedAspectRatio is float ratio && ratio > 0)
+        {
+            Rectangle curCrop = canvas.CropRect;
+            bool wChanged = (newW != curCrop.Width);
+            bool hChanged = (newH != curCrop.Height);
+
+            if (numW.Focused || (wChanged && !hChanged))
+            {
+                newH = (int)Math.Round(newW / ratio);
+                _isUpdatingInputs = true;
+                numH.Value = Math.Clamp(newH, numH.Minimum, numH.Maximum);
+                _isUpdatingInputs = false;
+            }
+            else if (numH.Focused || (hChanged && !wChanged))
+            {
+                newW = (int)Math.Round(newH * ratio);
+                _isUpdatingInputs = true;
+                numW.Value = Math.Clamp(newW, numW.Minimum, numW.Maximum);
+                _isUpdatingInputs = false;
+            }
+            else if (wChanged)
+            {
+                newH = (int)Math.Round(newW / ratio);
+                _isUpdatingInputs = true;
+                numH.Value = Math.Clamp(newH, numH.Minimum, numH.Maximum);
+                _isUpdatingInputs = false;
+            }
+        }
+
+        Rectangle newRect = new(newX, newY, newW, newH);
         canvas.SetCropRect(newRect);
-        lblAspectRatio.Text = $"Tỉ lệ: {GetRatioStr(newRect.Width, newRect.Height)}";
+        if (lblAspectRatio != null)
+        {
+            lblAspectRatio.Text = $"Tỉ lệ: {GetRatioStr(newRect.Width, newRect.Height)}";
+        }
+    }
+
+    private void SetActiveRatioButton(Button? activeBtn)
+    {
+        foreach (var b in _ratioButtons)
+        {
+            if (b == activeBtn)
+            {
+                b.BackColor = Color.FromArgb(0, 122, 204);
+                b.ForeColor = Color.White;
+            }
+            else
+            {
+                b.BackColor = Color.FromArgb(50, 55, 68);
+                b.ForeColor = Color.White;
+            }
+        }
+    }
+
+    private void ApplyAspectRatio(int rw, int rh, Button btn)
+    {
+        SetActiveRatioButton(btn);
+
+        if (rw <= 0 || rh <= 0)
+        {
+            // Tự do: cho phép thay đổi cả kích thước lẫn tỉ lệ
+            canvas.LockedAspectRatio = null;
+            return;
+        }
+
+        float targetRatio = (float)rw / rh;
+        canvas.LockedAspectRatio = targetRatio;
+
+        if (canvas.Image != null)
+        {
+            Rectangle cur = canvas.CropRect;
+            int imgW = canvas.Image.Width;
+            int imgH = canvas.Image.Height;
+
+            int newW = cur.Width;
+            int newH = (int)Math.Round(newW / targetRatio);
+
+            if (newH > imgH)
+            {
+                newH = imgH;
+                newW = (int)Math.Round(newH * targetRatio);
+            }
+            if (newW > imgW)
+            {
+                newW = imgW;
+                newH = (int)Math.Round(newW / targetRatio);
+            }
+
+            int newX = Math.Clamp(cur.X + (cur.Width - newW) / 2, 0, Math.Max(0, imgW - newW));
+            int newY = Math.Clamp(cur.Y + (cur.Height - newH) / 2, 0, Math.Max(0, imgH - newH));
+
+            Rectangle newRect = new(newX, newY, Math.Max(1, newW), Math.Max(1, newH));
+            canvas.SetCropRect(newRect);
+            UpdateInputsFromCropRect(newRect);
+        }
+    }
+
+    private void ApplyScreenResolution(int targetW, int targetH)
+    {
+        // Khi chọn section 2: có thể thay đổi được cả kích thước lẫn tỉ lệ -> chuyển về Tự do
+        canvas.LockedAspectRatio = null;
+        SetActiveRatioButton(btnRatioFree);
+
+        if (canvas.Image != null)
+        {
+            int imgW = canvas.Image.Width;
+            int imgH = canvas.Image.Height;
+
+            int w = Math.Min(targetW, imgW);
+            int h = Math.Min(targetH, imgH);
+
+            Rectangle cur = canvas.CropRect;
+            int centerX = cur.Width > 0 ? cur.X + cur.Width / 2 : imgW / 2;
+            int centerY = cur.Height > 0 ? cur.Y + cur.Height / 2 : imgH / 2;
+
+            int x = Math.Clamp(centerX - w / 2, 0, Math.Max(0, imgW - w));
+            int y = Math.Clamp(centerY - h / 2, 0, Math.Max(0, imgH - h));
+
+            Rectangle newRect = new(x, y, Math.Max(1, w), Math.Max(1, h));
+            canvas.SetCropRect(newRect);
+            UpdateInputsFromCropRect(newRect);
+        }
+        else
+        {
+            _isUpdatingInputs = true;
+            numW.Value = Math.Clamp(targetW, numW.Minimum, numW.Maximum);
+            numH.Value = Math.Clamp(targetH, numH.Minimum, numH.Maximum);
+            _isUpdatingInputs = false;
+        }
     }
 
     #endregion
@@ -721,6 +907,8 @@ public partial class MainCropperForm : Form
         Rectangle rect = new(item.X, item.Y, item.Width, item.Height);
         canvas.SetCropRect(rect);
         UpdateInputsFromCropRect(rect);
+        canvas.LockedAspectRatio = null;
+        SetActiveRatioButton(btnRatioFree);
 
         // Update UI status banner in properties panel
         lblCoordSection.Text = $"ĐANG SỬA: [{item.Name.ToUpper()}]";
@@ -742,11 +930,13 @@ public partial class MainCropperForm : Form
     private void CancelEditing()
     {
         _currentlyEditingItem = null;
-        lblCoordSection.Text = "THÔNG SỐ & ĐIỀU CHỈNH";
-        lblCoordSection.ForeColor = Color.FromArgb(0, 215, 255);
+        lblCoordSection.Text = "Properties";
+        lblCoordSection.ForeColor = Color.White;
         picCoordIcon.IconChar = IconChar.Sliders;
-        picCoordIcon.IconColor = Color.FromArgb(0, 215, 255);
+        picCoordIcon.IconColor = Color.White;
         btnCancelEdit.Visible = false;
+        canvas.LockedAspectRatio = null;
+        SetActiveRatioButton(btnRatioFree);
     }
 
     private void DeleteRegionItem(int index)
@@ -1154,9 +1344,9 @@ public partial class MainCropperForm : Form
             e.PaintBackground(e.ClipBounds, true);
             Rectangle rect = e.CellBounds;
 
-            using SolidBrush headerBg = new(Color.FromArgb(28, 33, 46));
-            using Pen borderPen = new(Color.FromArgb(46, 54, 72), 1);
-            using SolidBrush textBrush = new(Color.FromArgb(0, 215, 255));
+            using SolidBrush headerBg = new(Color.FromArgb(42, 46, 56));
+            using Pen borderPen = new(Color.FromArgb(56, 62, 76), 1);
+            using SolidBrush textBrush = new(Color.White);
             using Font font = new("Segoe UI Semibold", 8.5F);
 
             e.Graphics?.FillRectangle(headerBg, rect);
@@ -1196,8 +1386,8 @@ public partial class MainCropperForm : Form
             Rectangle rect = e.CellBounds;
             rect.Inflate(-4, -4);
 
-            using SolidBrush btnBg = new(Color.FromArgb(32, 42, 60));
-            using Pen btnBorder = new(Color.FromArgb(0, 180, 216), 1);
+            using SolidBrush btnBg = new(Color.FromArgb(50, 55, 68));
+            using Pen btnBorder = new(Color.FromArgb(70, 78, 96), 1);
 
             e.Graphics?.FillRectangle(btnBg, rect);
             e.Graphics?.DrawRectangle(btnBorder, rect);
@@ -1221,8 +1411,8 @@ public partial class MainCropperForm : Form
             Rectangle rect = e.CellBounds;
             rect.Inflate(-4, -4);
 
-            using SolidBrush btnBg = new(Color.FromArgb(55, 30, 36));
-            using Pen btnBorder = new(Color.FromArgb(220, 70, 80), 1);
+            using SolidBrush btnBg = new(Color.FromArgb(70, 40, 48));
+            using Pen btnBorder = new(Color.FromArgb(200, 70, 80), 1);
 
             e.Graphics?.FillRectangle(btnBg, rect);
             e.Graphics?.DrawRectangle(btnBorder, rect);
@@ -1249,9 +1439,9 @@ public partial class MainCropperForm : Form
             rect.Inflate(-6, -4);
 
             bool isImage = item.ItemType == CropItemType.Image;
-            Color badgeBg = isImage ? Color.FromArgb(16, 85, 60) : Color.FromArgb(12, 60, 95);
-            Color badgeBorder = isImage ? Color.FromArgb(16, 185, 129) : Color.FromArgb(0, 180, 216);
-            Color textCol = isImage ? Color.FromArgb(160, 255, 215) : Color.FromArgb(170, 235, 255);
+            Color badgeBg = isImage ? Color.FromArgb(20, 75, 55) : Color.FromArgb(45, 52, 68);
+            Color badgeBorder = isImage ? Color.FromArgb(16, 185, 129) : Color.FromArgb(80, 90, 115);
+            Color textCol = Color.White;
             Bitmap iconBmp = isImage ? _imageIconBmp : _coordIconBmp;
 
             using SolidBrush bg = new(badgeBg);
@@ -1338,6 +1528,176 @@ public partial class MainCropperForm : Form
             a = temp;
         }
         return a == 0 ? 1 : a;
+    }
+
+    #endregion
+
+    #region Project Management
+
+    private void UpdateAppTitle()
+    {
+        if (_currentProject != null && !string.IsNullOrWhiteSpace(_currentProject.Name))
+        {
+            this.Text = $"Screen Cropper Pro - [{_currentProject.Name}]";
+        }
+        else
+        {
+            this.Text = "Screen Cropper Pro - Định vị tọa độ & Cắt ảnh màn hình";
+        }
+    }
+
+    private void ShowProjectDialog()
+    {
+        using var dlg = new ProjectManagementDialog(_dpiScale);
+        if (dlg.ShowDialog(this) == DialogResult.OK)
+        {
+            if (dlg.IsNewProjectRequested)
+            {
+                CreateNewProject(dlg.NewProjectName ?? $"Dự án_{DateTime.Now:yyyyMMdd_HHmm}");
+            }
+            else if (!string.IsNullOrEmpty(dlg.SelectedProjectPath))
+            {
+                OpenProjectFromFile(dlg.SelectedProjectPath);
+            }
+        }
+    }
+
+    private void CreateNewProject(string projectName)
+    {
+        _currentProject = new ProjectData
+        {
+            Name = projectName,
+            CreatedAt = DateTime.Now,
+            LastModified = DateTime.Now
+        };
+        _currentProjectFilePath = null;
+        _savedRegions.Clear();
+        RefreshSavedGrid();
+
+        // Reset canvas & crop
+        canvas.Image?.Dispose();
+        canvas.Image = null;
+        lblImageInfo.Text = "Ảnh: Chưa nạp";
+        lblCursorInfo.Text = "Chuột: -";
+        canvas.SetCropRect(Rectangle.Empty);
+        _isUpdatingInputs = true;
+        numX.Value = 0;
+        numY.Value = 0;
+        numW.Value = 0;
+        numH.Value = 0;
+        _isUpdatingInputs = false;
+
+        UpdateAppTitle();
+        MessageBox.Show($"Đã tạo dự án mới: '{projectName}'!\nBạn có thể nạp ảnh hoặc dán ảnh vào để bắt đầu làm việc.", "Dự án mới", MessageBoxButtons.OK, MessageBoxIcon.Information);
+    }
+
+    private void OpenProjectFromFile(string filePath)
+    {
+        try
+        {
+            var proj = ProjectService.LoadProject(filePath);
+            if (proj == null)
+            {
+                MessageBox.Show("Không thể đọc tệp dự án đã chọn.", "Lỗi tải dự án", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
+            _currentProject = proj;
+            _currentProjectFilePath = filePath;
+
+            // Restore image
+            if (!string.IsNullOrEmpty(proj.ImageBase64))
+            {
+                var img = ProjectService.ImageFromBase64(proj.ImageBase64);
+                if (img is Bitmap bmp)
+                {
+                    SetSourceImage(bmp, proj.Name);
+                }
+            }
+            else
+            {
+                canvas.Image?.Dispose();
+                canvas.Image = null;
+                lblImageInfo.Text = "Ảnh: Chưa nạp";
+            }
+
+            // Restore saved regions
+            _savedRegions.Clear();
+            if (proj.SavedRegions != null && proj.SavedRegions.Count > 0)
+            {
+                _savedRegions.AddRange(proj.SavedRegions);
+            }
+            RefreshSavedGrid();
+
+            // Restore crop rect & aspect ratio
+            canvas.LockedAspectRatio = proj.LockedAspectRatio;
+            if (proj.CropW > 0 && proj.CropH > 0)
+            {
+                Rectangle r = new(proj.CropX, proj.CropY, proj.CropW, proj.CropH);
+                canvas.SetCropRect(r);
+                UpdateInputsFromCropRect(r);
+            }
+
+            UpdateAppTitle();
+            MessageBox.Show($"Đã mở dự án '{proj.Name}' thành công!\nSố vùng tọa độ: {_savedRegions.Count}", "Mở dự án", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Lỗi khi mở dự án: {ex.Message}", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private void SaveCurrentProject()
+    {
+        if (_currentProject == null)
+        {
+            using ProjectNameDialog dlg = new("Lưu dự án mới", "Nhập tên cho dự án:", $"Dự án_{DateTime.Now:yyyyMMdd_HHmm}");
+            if (dlg.ShowDialog(this) != DialogResult.OK || string.IsNullOrWhiteSpace(dlg.ProjectName))
+            {
+                return;
+            }
+
+            _currentProject = new ProjectData
+            {
+                Name = dlg.ProjectName
+            };
+        }
+
+        // Capture main capture image & thumbnail if canvas.Image is present
+        if (canvas.Image != null)
+        {
+            _currentProject.ImageBase64 = ProjectService.ImageToBase64(canvas.Image);
+            _currentProject.ThumbnailBase64 = ProjectService.GenerateThumbnailBase64(canvas.Image);
+            _currentProject.ImageWidth = canvas.Image.Width;
+            _currentProject.ImageHeight = canvas.Image.Height;
+        }
+        else
+        {
+            _currentProject.ImageBase64 = null;
+            _currentProject.ThumbnailBase64 = null;
+            _currentProject.ImageWidth = 0;
+            _currentProject.ImageHeight = 0;
+        }
+
+        Rectangle crop = canvas.CropRect;
+        _currentProject.CropX = crop.X;
+        _currentProject.CropY = crop.Y;
+        _currentProject.CropW = crop.Width;
+        _currentProject.CropH = crop.Height;
+        _currentProject.LockedAspectRatio = canvas.LockedAspectRatio;
+        _currentProject.SavedRegions = new List<CropRegionItem>(_savedRegions);
+
+        try
+        {
+            string savedPath = ProjectService.SaveProject(_currentProject, _currentProjectFilePath);
+            _currentProjectFilePath = savedPath;
+            UpdateAppTitle();
+            MessageBox.Show($"Đã lưu dự án '{_currentProject.Name}' thành công!\nĐường dẫn: {savedPath}", "Lưu dự án thành công", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Lỗi khi lưu dự án: {ex.Message}", "Lỗi lưu dự án", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
     }
 
     #endregion

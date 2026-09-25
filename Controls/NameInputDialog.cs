@@ -52,7 +52,7 @@ public class NameInputDialog : Form
         MaximizeBox = false;
         MinimizeBox = false;
         StartPosition = FormStartPosition.CenterParent;
-        BackColor = Color.FromArgb(28, 30, 38);
+        BackColor = Color.FromArgb(32, 35, 42);
         ForeColor = Color.FromArgb(240, 240, 245);
         Font = new Font("Segoe UI", 9.5F);
 
@@ -60,7 +60,7 @@ public class NameInputDialog : Form
         IconPictureBox picHeader = new()
         {
             IconChar = headerIcon,
-            IconColor = Color.FromArgb(0, 215, 255),
+            IconColor = Color.White,
             IconSize = 22,
             Size = new Size(24, 24),
             Location = new Point(22, 17),
@@ -72,7 +72,7 @@ public class NameInputDialog : Form
         {
             Text = headerText,
             Font = new Font("Segoe UI", 11.5F, FontStyle.Bold),
-            ForeColor = Color.FromArgb(0, 215, 255),
+            ForeColor = Color.White,
             Location = new Point(50, 16),
             AutoSize = true
         };
@@ -82,7 +82,7 @@ public class NameInputDialog : Form
         IconPictureBox picCoords = new()
         {
             IconChar = IconChar.LocationDot,
-            IconColor = Color.FromArgb(0, 180, 216),
+            IconColor = Color.White,
             IconSize = 14,
             Size = new Size(16, 16),
             Location = new Point(24, 49),
@@ -105,13 +105,13 @@ public class NameInputDialog : Form
             {
                 Location = new Point(24, currentY),
                 Size = new Size(436, 52),
-                BackColor = Color.FromArgb(34, 38, 50),
+                BackColor = Color.FromArgb(40, 44, 54),
                 BorderStyle = BorderStyle.FixedSingle
             };
 
             radOverwrite.Text = $"Lưu đè (Cập nhật '{_originalName}')";
             radOverwrite.Checked = true;
-            radOverwrite.ForeColor = Color.FromArgb(0, 220, 255);
+            radOverwrite.ForeColor = Color.White;
             radOverwrite.Font = new Font("Segoe UI Semibold", 8.5F);
             radOverwrite.Location = new Point(12, 4);
             radOverwrite.AutoSize = true;

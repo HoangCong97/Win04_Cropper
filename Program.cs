@@ -136,9 +136,55 @@ static class Program
             };
             timer.Start();
             Application.Run(form);
-            Console.WriteLine("[PASS] Test 5: Application.Run lifecycle completed normally.");
+            // Test 6: QuickSize Aspect Ratio Locking & Screen Resolution Verification
+            Console.WriteLine("[DEBUG] Starting Test 6: QuickSize Preset verification...");
+            if (canvas.LockedAspectRatio != null) throw new Exception("Expected LockedAspectRatio to be null initially");
+            canvas.LockedAspectRatio = 16f / 9f;
+            if (!canvas.LockedAspectRatio.HasValue || Math.Abs(canvas.LockedAspectRatio.Value - (16f / 9f)) > 0.001f)
+                throw new Exception("LockedAspectRatio failed to store ratio");
+            canvas.LockedAspectRatio = null;
+            if (canvas.LockedAspectRatio != null) throw new Exception("LockedAspectRatio failed to reset to null");
+            Console.WriteLine("[PASS] Test 6: QuickSize Aspect Ratio Locking verified.");
 
-            Console.WriteLine(">>> ALL 5 SELF-DIAGNOSTIC TESTS PASSED SUCCESSFULLY! <<<");
+            // Test 7: ProjectService Save & Load & Thumbnail Generation
+            Console.WriteLine("[DEBUG] Starting Test 7: ProjectService verification...");
+            using (var testImg = new System.Drawing.Bitmap(320, 240))
+            {
+                using var g = System.Drawing.Graphics.FromImage(testImg);
+                g.Clear(System.Drawing.Color.MediumSeaGreen);
+                string thumbBase64 = Services.ProjectService.GenerateThumbnailBase64(testImg, 120, 80);
+                if (string.IsNullOrEmpty(thumbBase64)) throw new Exception("Failed to generate project thumbnail.");
+                var proj = new Models.ProjectData
+                {
+                    Name = "Test Project SelfTest",
+                    CropX = 10, CropY = 20, CropW = 100, CropH = 50,
+                    ThumbnailBase64 = thumbBase64
+                };
+                string savedProjPath = Services.ProjectService.SaveProject(proj);
+                if (!File.Exists(savedProjPath)) throw new Exception("Saved project file not found.");
+                var loadedProj = Services.ProjectService.LoadProject(savedProjPath);
+                if (loadedProj == null || loadedProj.Name != "Test Project SelfTest" || loadedProj.CropW != 100)
+                    throw new Exception("Loaded project data mismatch.");
+                // Also test ProjectManagementDialog instantiation & snapshot
+                using (var dlg = new Controls.ProjectManagementDialog())
+                {
+                    dlg.StartPosition = FormStartPosition.Manual;
+                    dlg.Location = new Point(0, 0);
+                    dlg.Show();
+                    Application.DoEvents();
+                    using var dlgBmp = new System.Drawing.Bitmap(dlg.Width, dlg.Height);
+                    dlg.DrawToBitmap(dlgBmp, new System.Drawing.Rectangle(0, 0, dlg.Width, dlg.Height));
+                    dlgBmp.Save("project_dialog_render.png", System.Drawing.Imaging.ImageFormat.Png);
+                    dlg.Close();
+                    Console.WriteLine($"[PASS] Saved visual snapshot to project_dialog_render.png ({dlg.Width}x{dlg.Height})");
+                }
+
+                // Clean up test project
+                try { File.Delete(savedProjPath); Services.ProjectService.DeleteFromHistory(proj.Id); } catch { }
+                Console.WriteLine("[PASS] Test 7: ProjectService Save/Load, Thumbnail, and Dialog verified.");
+            }
+
+            Console.WriteLine(">>> ALL 7 SELF-DIAGNOSTIC TESTS PASSED SUCCESSFULLY! <<<");
             return 0;
         }
         catch (Exception ex)

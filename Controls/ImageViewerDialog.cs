@@ -59,14 +59,14 @@ public class ImageViewerDialog : Form
         {
             Dock = DockStyle.Top,
             Height = 52,
-            BackColor = Color.FromArgb(28, 31, 40),
+            BackColor = Color.FromArgb(42, 46, 56),
             Padding = new Padding(14, 8, 14, 8)
         };
 
         IconPictureBox picHeader = new()
         {
             IconChar = IconChar.Image,
-            IconColor = Color.FromArgb(0, 220, 255),
+            IconColor = Color.White,
             IconSize = 22,
             Size = new Size(24, 24),
             Location = new Point(14, 14),
@@ -78,7 +78,7 @@ public class ImageViewerDialog : Form
         {
             Text = imageName,
             Font = new Font("Segoe UI Bold", 11.5F),
-            ForeColor = Color.FromArgb(0, 220, 255),
+            ForeColor = Color.White,
             Location = new Point(42, 13),
             AutoSize = true
         };

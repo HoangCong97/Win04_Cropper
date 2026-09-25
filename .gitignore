@@ -19,4 +19,5 @@
 ## Standalone build outputs
 *.exe
 app_render.png
+project_dialog_render.png
 app_screenshot.png

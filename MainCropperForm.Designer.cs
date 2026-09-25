@@ -1,3 +1,4 @@
+#nullable enable
 using System.Drawing;
 using System.Windows.Forms;
 using FontAwesome.Sharp;
@@ -13,6 +14,7 @@ partial class MainCropperForm
     private Panel pnlHeader = null!;
     private IconPictureBox picAppLogo = null!;
     private Label lblAppTitle = null!;
+    private IconButton btnProject = null!;
     private IconButton btnOpenFile = null!;
     private IconButton btnPasteClipboard = null!;
     private IconButton btnLiveCapture = null!;
@@ -21,6 +23,7 @@ partial class MainCropperForm
     private IconButton btn100View = null!;
     private Label lblImageInfo = null!;
     private Label lblCursorInfo = null!;
+    private IconButton btnSaveProject = null!;
 
     // Body Panels
     private SplitContainer splitMain = null!;
@@ -32,7 +35,6 @@ partial class MainCropperForm
     private IconPictureBox picCanvasIcon = null!;
     private Label lblCanvasTitle = null!;
     private IconPictureBox picCanvasGuide = null!;
-    private Label lblCanvasGuide = null!;
     private Label lblZoomValue = null!;
     private IconButton btnZoomIn = null!;
     private IconButton btnZoomOut = null!;
@@ -55,7 +57,7 @@ partial class MainCropperForm
     private NumericUpDown numW = null!;
     private Label lblH = null!;
     private NumericUpDown numH = null!;
-    private Label lblAspectRatio = null!;
+    private Label? lblAspectRatio = null;
 
     // Nudge and resize buttons
     private IconButton btnNudgeLeft = null!;
@@ -63,21 +65,36 @@ partial class MainCropperForm
     private IconButton btnNudgeUp = null!;
     private IconButton btnNudgeDown = null!;
     private ComboBox cboNudgeStep = null!;
-
-    private Button btnWMinus10 = null!;
-    private Button btnWMinus1 = null!;
-    private Button btnWPlus1 = null!;
-    private Button btnWPlus10 = null!;
-    private Button btnHMinus10 = null!;
-    private Button btnHMinus1 = null!;
-    private Button btnHPlus1 = null!;
-    private Button btnHPlus10 = null!;
     private IconButton btnCenterBox = null!;
+
+    // Quick size presets: aspect ratios and screen sizes
+    private Button btnRatio1x1 = null!;
+    private Button btnRatio3x4 = null!;
+    private Button btnRatio4x6 = null!;
+    private Button btnRatio9x16 = null!;
+    private Button btnRatioFree = null!;
+    private Button btnRatio4x3 = null!;
+    private Button btnRatio6x4 = null!;
+    private Button btnRatio16x9 = null!;
+
+    private Button btnRes1920x1080 = null!;
+    private Button btnRes1600x900 = null!;
+    private Button btnRes1366x768 = null!;
+    private Button btnRes1280x720 = null!;
+    private Button btnRes2560x1440 = null!;
+    private Button btnRes1440x900 = null!;
+    private Button btnRes1024x768 = null!;
+    private Button btnRes800x600 = null!;
+
+    private TableLayoutPanel tlpRatios = null!;
+    private TableLayoutPanel tlpScreenSizes = null!;
 
     // Action buttons in properties panel
     private IconButton btnSaveCoordinates = null!;
     private IconButton btnCropAndSaveImage = null!;
     private IconButton btnCopyCroppedImage = null!;
+    private Panel pnlPropertiesActions = null!;
+    private ToolTip tipActions = null!;
 
     // Saved list section
     private Panel pnlSavedSection = null!;
@@ -98,6 +115,7 @@ partial class MainCropperForm
         if (disposing)
         {
             components?.Dispose();
+            tipActions?.Dispose();
             _editIconBmp?.Dispose();
             _deleteIconBmp?.Dispose();
             _coordIconBmp?.Dispose();
@@ -122,11 +140,19 @@ partial class MainCropperForm
         this.Text = "Screen Cropper Pro - Định vị tọa độ & Cắt ảnh màn hình";
         this.Size = new Size(DpiScale(1400), DpiScale(880));
         this.MinimumSize = new Size(DpiScale(1020), DpiScale(680));
-        this.BackColor = Color.FromArgb(20, 22, 28);
+        this.BackColor = Color.FromArgb(32, 35, 42);
         this.ForeColor = Color.FromArgb(235, 238, 245);
         this.Font = new Font("Segoe UI", 9F);
         this.StartPosition = FormStartPosition.CenterScreen;
         this.KeyPreview = true;
+
+        tipActions = new ToolTip
+        {
+            InitialDelay = 150,
+            ReshowDelay = 80,
+            AutoPopDelay = 6000,
+            ShowAlways = true
+        };
 
         // -------------------------------------------------------------
         // Header Panel (Dock = Top, Height = 56)
@@ -135,14 +161,14 @@ partial class MainCropperForm
         {
             Dock = DockStyle.Top,
             Height = DpiScale(56),
-            BackColor = Color.FromArgb(28, 31, 40),
-            Padding = new Padding(DpiScale(12), DpiScale(8), DpiScale(12), DpiScale(8))
+            BackColor = Color.FromArgb(42, 46, 56),
+            Padding = Padding.Empty
         };
 
         picAppLogo = new IconPictureBox
         {
             IconChar = IconChar.CropSimple,
-            IconColor = Color.FromArgb(0, 215, 255),
+            IconColor = Color.White,
             IconSize = DpiScale(24),
             Size = new Size(DpiScale(26), DpiScale(26)),
             Location = new Point(DpiScale(14), DpiScale(15)),
@@ -154,7 +180,7 @@ partial class MainCropperForm
         {
             Text = "CROPPER PRO",
             Font = new Font("Segoe UI", 12F, FontStyle.Bold),
-            ForeColor = Color.FromArgb(0, 215, 255),
+            ForeColor = Color.White,
             Location = new Point(picAppLogo.Right + DpiScale(8), DpiScale(15)),
             AutoSize = true
         };
@@ -162,7 +188,7 @@ partial class MainCropperForm
 
         FlowLayoutPanel pnlHeaderButtons = new()
         {
-            Location = new Point(DpiScale(195), DpiScale(10)),
+            Location = new Point(DpiScale(195), DpiScale(11)),
             Height = DpiScale(36),
             AutoSize = true,
             FlowDirection = FlowDirection.LeftToRight,
@@ -170,6 +196,10 @@ partial class MainCropperForm
             BackColor = Color.Transparent
         };
         pnlHeader.Controls.Add(pnlHeaderButtons);
+
+        btnProject = CreateHeaderButton("Dự án", IconChar.FolderTree, Color.FromArgb(0, 122, 204));
+        btnProject.Click += (s, e) => ShowProjectDialog();
+        pnlHeaderButtons.Controls.Add(btnProject);
 
         btnOpenFile = CreateHeaderButton("Nạp ảnh", IconChar.FolderOpen);
         btnOpenFile.Click += (s, e) => OpenImageFromFile();
@@ -195,7 +225,7 @@ partial class MainCropperForm
         btn100View.Click += (s, e) => canvas.SetZoom100();
         pnlHeaderButtons.Controls.Add(btn100View);
 
-        // Header status labels (Flow right-aligned)
+        // Header status and Save Project (Flow right-aligned, parallel with header buttons)
         FlowLayoutPanel pnlHeaderStatus = new()
         {
             Dock = DockStyle.Right,
@@ -203,7 +233,7 @@ partial class MainCropperForm
             FlowDirection = FlowDirection.LeftToRight,
             WrapContents = false,
             BackColor = Color.Transparent,
-            Padding = new Padding(0, DpiScale(18), DpiScale(14), 0)
+            Padding = new Padding(0, DpiScale(11), DpiScale(14), 0)
         };
         pnlHeader.Controls.Add(pnlHeaderStatus);
 
@@ -212,17 +242,13 @@ partial class MainCropperForm
             Text = "Ảnh: Chưa nạp",
             ForeColor = Color.FromArgb(170, 185, 205),
             AutoSize = true,
-            Margin = new Padding(0, 0, DpiScale(16), 0)
+            Margin = new Padding(0, DpiScale(8), DpiScale(14), 0)
         };
         pnlHeaderStatus.Controls.Add(lblImageInfo);
 
-        lblCursorInfo = new Label
-        {
-            Text = "Tọa độ chuột: -",
-            ForeColor = Color.FromArgb(0, 220, 255),
-            AutoSize = true
-        };
-        pnlHeaderStatus.Controls.Add(lblCursorInfo);
+        btnSaveProject = CreateHeaderButton("Lưu dự án", IconChar.FloppyDisk, Color.FromArgb(16, 185, 129));
+        btnSaveProject.Click += (s, e) => SaveCurrentProject();
+        pnlHeaderStatus.Controls.Add(btnSaveProject);
 
         // -------------------------------------------------------------
         // Body Container: splitMain (Top vs Bottom)
@@ -232,11 +258,11 @@ partial class MainCropperForm
             Dock = DockStyle.Fill,
             Orientation = Orientation.Horizontal,
             SplitterWidth = 6,
-            BackColor = Color.FromArgb(38, 42, 54),
+            BackColor = Color.FromArgb(56, 61, 74),
             Size = new Size(DpiScale(1400), DpiScale(820)),
             Panel1MinSize = DpiScale(150),
             Panel2MinSize = DpiScale(150),
-            SplitterDistance = DpiScale(530)
+            SplitterDistance = DpiScale(500)
         };
         this.Controls.Add(splitMain);
         this.Controls.Add(pnlHeader);
@@ -250,28 +276,29 @@ partial class MainCropperForm
             Dock = DockStyle.Fill,
             Orientation = Orientation.Vertical,
             SplitterWidth = 6,
-            BackColor = Color.FromArgb(38, 42, 54),
+            BackColor = Color.FromArgb(56, 61, 74),
             Size = new Size(DpiScale(1400), DpiScale(530)),
             Panel1MinSize = DpiScale(250),
-            Panel2MinSize = DpiScale(280),
-            SplitterDistance = DpiScale(1040)
+            Panel2MinSize = DpiScale(360),
+            FixedPanel = FixedPanel.Panel2,
+            SplitterDistance = DpiScale(1030)
         };
         splitMain.Panel1.Controls.Add(splitTop);
 
         // Left Canvas Container
-        pnlCanvasContainer = new Panel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(18, 20, 26) };
+        pnlCanvasContainer = new Panel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(30, 33, 40) };
         pnlCanvasHeader = new Panel
         {
             Dock = DockStyle.Top,
             Height = DpiScale(34),
-            BackColor = Color.FromArgb(24, 27, 35),
-            Padding = new Padding(DpiScale(8), DpiScale(5), DpiScale(8), DpiScale(5))
+            BackColor = Color.FromArgb(42, 46, 56),
+            Padding = Padding.Empty
         };
 
         picCanvasIcon = new IconPictureBox
         {
             IconChar = IconChar.Image,
-            IconColor = Color.FromArgb(0, 215, 255),
+            IconColor = Color.White,
             IconSize = DpiScale(16),
             Size = new Size(DpiScale(20), DpiScale(20)),
             Location = new Point(DpiScale(10), DpiScale(7)),
@@ -281,10 +308,10 @@ partial class MainCropperForm
 
         lblCanvasTitle = new Label
         {
-            Text = "Ảnh gốc & Khung cắt ảo",
+            Text = "Main capture",
             UseMnemonic = false,
             Font = new Font("Segoe UI Semibold", 9F),
-            ForeColor = Color.FromArgb(240, 245, 255),
+            ForeColor = Color.White,
             Location = new Point(picCanvasIcon.Right + DpiScale(6), DpiScale(7)),
             AutoSize = true
         };
@@ -294,33 +321,38 @@ partial class MainCropperForm
         {
             IconChar = IconChar.Lightbulb,
             IconColor = Color.FromArgb(245, 185, 30),
-            IconSize = DpiScale(14),
+            IconSize = DpiScale(15),
             Size = new Size(DpiScale(18), DpiScale(18)),
-            Location = new Point(lblCanvasTitle.Right + DpiScale(20), DpiScale(8)),
-            BackColor = Color.Transparent
+            Location = new Point(lblCanvasTitle.Right + DpiScale(8), DpiScale(8)),
+            BackColor = Color.Transparent,
+            Cursor = Cursors.Hand
         };
+        tipActions.SetToolTip(picCanvasGuide, "Lăn chuột: Zoom | Chuột giữa/Phải: Pan | Kéo cạnh/góc: Resize");
         pnlCanvasHeader.Controls.Add(picCanvasGuide);
 
-        lblCanvasGuide = new Label
+        // Right side: Mouse coordinates
+        lblCursorInfo = new Label
         {
-            Text = "Lăn chuột: Zoom | Chuột giữa/Phải: Pan | Kéo cạnh/góc: Resize",
-            ForeColor = Color.FromArgb(140, 150, 170),
-            Font = new Font("Segoe UI", 8F),
-            Location = new Point(picCanvasGuide.Right + DpiScale(6), DpiScale(8)),
-            AutoSize = true
+            Text = "Chuột: -",
+            ForeColor = Color.FromArgb(200, 215, 235),
+            Font = new Font("Segoe UI", 8.5F),
+            Dock = DockStyle.Right,
+            TextAlign = ContentAlignment.MiddleRight,
+            AutoSize = true,
+            Padding = new Padding(0, DpiScale(7), DpiScale(12), 0)
         };
-        pnlCanvasHeader.Controls.Add(lblCanvasGuide);
+        pnlCanvasHeader.Controls.Add(lblCursorInfo);
 
+        // Center: Zoom buttons (-, 100%, +)
         FlowLayoutPanel pnlCanvasZoom = new()
         {
-            Dock = DockStyle.Right,
-            AutoSize = true,
+            Size = new Size(DpiScale(110), DpiScale(26)),
             FlowDirection = FlowDirection.LeftToRight,
             WrapContents = false,
             BackColor = Color.Transparent,
-            Padding = new Padding(0, DpiScale(4), DpiScale(8), 0)
+            Margin = Padding.Empty,
+            Padding = Padding.Empty
         };
-        pnlCanvasHeader.Controls.Add(pnlCanvasZoom);
 
         btnZoomOut = new IconButton
         {
@@ -329,8 +361,9 @@ partial class MainCropperForm
             IconSize = DpiScale(13),
             Size = new Size(DpiScale(28), DpiScale(24)),
             FlatStyle = FlatStyle.Flat,
-            BackColor = Color.FromArgb(40, 44, 56),
+            BackColor = Color.FromArgb(54, 59, 72),
             ForeColor = Color.White,
+            Margin = Padding.Empty,
             Cursor = Cursors.Hand
         };
         btnZoomOut.FlatAppearance.BorderSize = 0;
@@ -340,9 +373,10 @@ partial class MainCropperForm
         lblZoomValue = new Label
         {
             Text = "100%",
-            ForeColor = Color.FromArgb(0, 220, 255),
+            ForeColor = Color.White,
             Font = new Font("Segoe UI Semibold", 8.5F),
             Size = new Size(DpiScale(50), DpiScale(24)),
+            Margin = Padding.Empty,
             TextAlign = ContentAlignment.MiddleCenter
         };
         pnlCanvasZoom.Controls.Add(lblZoomValue);
@@ -354,13 +388,33 @@ partial class MainCropperForm
             IconSize = DpiScale(13),
             Size = new Size(DpiScale(28), DpiScale(24)),
             FlatStyle = FlatStyle.Flat,
-            BackColor = Color.FromArgb(40, 44, 56),
+            BackColor = Color.FromArgb(54, 59, 72),
             ForeColor = Color.White,
+            Margin = Padding.Empty,
             Cursor = Cursors.Hand
         };
         btnZoomIn.FlatAppearance.BorderSize = 0;
         btnZoomIn.Click += (s, e) => canvas.ZoomIn();
         pnlCanvasZoom.Controls.Add(btnZoomIn);
+
+        pnlCanvasHeader.Controls.Add(pnlCanvasZoom);
+        pnlCanvasZoom.BringToFront();
+
+        void CenterCanvasZoom()
+        {
+            if (pnlCanvasHeader.ClientSize.Width > 0)
+            {
+                int zW = pnlCanvasZoom.Width > 0 ? pnlCanvasZoom.Width : DpiScale(110);
+                int zH = pnlCanvasZoom.Height > 0 ? pnlCanvasZoom.Height : DpiScale(26);
+                pnlCanvasZoom.Location = new Point(
+                    Math.Max(DpiScale(160), (pnlCanvasHeader.ClientSize.Width - zW) / 2),
+                    Math.Max(0, (pnlCanvasHeader.ClientSize.Height - zH) / 2)
+                );
+            }
+        }
+        pnlCanvasHeader.Resize += (s, e) => CenterCanvasZoom();
+        pnlCanvasHeader.Layout += (s, e) => CenterCanvasZoom();
+        CenterCanvasZoom();
 
         canvas = new CanvasControl { Dock = DockStyle.Fill };
         pnlCanvasContainer.Controls.Add(canvas);
@@ -368,14 +422,14 @@ partial class MainCropperForm
         splitTop.Panel1.Controls.Add(pnlCanvasContainer);
 
         // Right Panel: Properties & Adjustments (replacing Preview)
-        pnlPropertiesContainer = new Panel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(20, 22, 28) };
+        pnlPropertiesContainer = new Panel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(32, 35, 42) };
         splitTop.Panel2.Controls.Add(pnlPropertiesContainer);
         InitializePropertiesPanel();
 
         // -------------------------------------------------------------
         // Bottom Panel: Saved Regions Grid (occupies 100% of bottom)
         // -------------------------------------------------------------
-        pnlSavedSection = new Panel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(20, 22, 28) };
+        pnlSavedSection = new Panel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(32, 35, 42) };
         splitMain.Panel2.Controls.Add(pnlSavedSection);
         InitializeSavedSection();
 
@@ -388,7 +442,7 @@ partial class MainCropperForm
         {
             Dock = DockStyle.Top,
             Height = DpiScale(36),
-            BackColor = Color.FromArgb(28, 31, 42),
+            BackColor = Color.FromArgb(42, 46, 56),
             Padding = new Padding(DpiScale(10), DpiScale(4), DpiScale(8), DpiScale(4))
         };
         pnlPropertiesContainer.Controls.Add(pnlPropertiesHeader);
@@ -396,7 +450,7 @@ partial class MainCropperForm
         picCoordIcon = new IconPictureBox
         {
             IconChar = IconChar.Sliders,
-            IconColor = Color.FromArgb(0, 215, 255),
+            IconColor = Color.White,
             IconSize = DpiScale(16),
             Size = new Size(DpiScale(20), DpiScale(20)),
             Location = new Point(DpiScale(10), DpiScale(8)),
@@ -406,10 +460,10 @@ partial class MainCropperForm
 
         lblCoordSection = new Label
         {
-            Text = "THÔNG SỐ & ĐIỀU CHỈNH",
+            Text = "Properties",
             UseMnemonic = false,
             Font = new Font("Segoe UI Bold", 9F),
-            ForeColor = Color.FromArgb(0, 215, 255),
+            ForeColor = Color.White,
             Location = new Point(picCoordIcon.Right + DpiScale(6), DpiScale(8)),
             AutoSize = true
         };
@@ -427,7 +481,7 @@ partial class MainCropperForm
             Padding = new Padding(DpiScale(6), 0, DpiScale(8), 0),
             Dock = DockStyle.Right,
             Width = DpiScale(85),
-            BackColor = Color.FromArgb(58, 30, 38),
+            BackColor = Color.FromArgb(70, 40, 48),
             ForeColor = Color.FromArgb(255, 175, 185),
             FlatStyle = FlatStyle.Flat,
             Font = new Font("Segoe UI Semibold", 8F),
@@ -438,15 +492,103 @@ partial class MainCropperForm
         btnCancelEdit.Click += (s, e) => CancelEditing();
         pnlPropertiesHeader.Controls.Add(btnCancelEdit);
 
+        // -------------------------------------------------------------
+        // Fixed bottom panel for actions (Always visible, icon-only)
+        // -------------------------------------------------------------
+        pnlPropertiesActions = new Panel
+        {
+            Dock = DockStyle.Bottom,
+            Height = DpiScale(44),
+            BackColor = Color.FromArgb(36, 40, 50),
+            Padding = new Padding(DpiScale(8), DpiScale(6), DpiScale(8), DpiScale(6))
+        };
+        pnlPropertiesContainer.Controls.Add(pnlPropertiesActions);
+
+        TableLayoutPanel tlpActionButtons = new()
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 3,
+            RowCount = 1,
+            BackColor = Color.Transparent,
+            Margin = Padding.Empty,
+            Padding = Padding.Empty
+        };
+        tlpActionButtons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.33F));
+        tlpActionButtons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.34F));
+        tlpActionButtons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.33F));
+        tlpActionButtons.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+        pnlPropertiesActions.Controls.Add(tlpActionButtons);
+
+        btnSaveCoordinates = new IconButton
+        {
+            Text = string.Empty,
+            IconChar = IconChar.FloppyDisk,
+            IconColor = Color.White,
+            IconSize = DpiScale(17),
+            ImageAlign = ContentAlignment.MiddleCenter,
+            Dock = DockStyle.Fill,
+            Margin = new Padding(0, 0, DpiScale(3), 0),
+            BackColor = Color.FromArgb(50, 55, 68),
+            ForeColor = Color.White,
+            FlatStyle = FlatStyle.Flat,
+            Cursor = Cursors.Hand
+        };
+        btnSaveCoordinates.FlatAppearance.BorderSize = 0;
+        btnSaveCoordinates.Click += (s, e) => SaveCurrentCoordinates();
+        tipActions.SetToolTip(btnSaveCoordinates, "Lưu tọa độ (Ctrl+Shift+S / Ctrl+D)");
+        tlpActionButtons.Controls.Add(btnSaveCoordinates, 0, 0);
+
+        btnCropAndSaveImage = new IconButton
+        {
+            Text = string.Empty,
+            IconChar = IconChar.Crop,
+            IconColor = Color.White,
+            IconSize = DpiScale(17),
+            ImageAlign = ContentAlignment.MiddleCenter,
+            Dock = DockStyle.Fill,
+            Margin = new Padding(DpiScale(3), 0, DpiScale(3), 0),
+            BackColor = Color.FromArgb(16, 185, 129),
+            ForeColor = Color.White,
+            FlatStyle = FlatStyle.Flat,
+            Cursor = Cursors.Hand
+        };
+        btnCropAndSaveImage.FlatAppearance.BorderSize = 0;
+        btnCropAndSaveImage.Click += (s, e) => CropAndSaveImage();
+        tipActions.SetToolTip(btnCropAndSaveImage, "Cắt & Lưu ảnh (Ctrl+S)");
+        tlpActionButtons.Controls.Add(btnCropAndSaveImage, 1, 0);
+
+        btnCopyCroppedImage = new IconButton
+        {
+            Text = string.Empty,
+            IconChar = IconChar.Copy,
+            IconColor = Color.White,
+            IconSize = DpiScale(16),
+            ImageAlign = ContentAlignment.MiddleCenter,
+            Dock = DockStyle.Fill,
+            Margin = new Padding(DpiScale(3), 0, 0, 0),
+            BackColor = Color.FromArgb(50, 55, 68),
+            ForeColor = Color.White,
+            FlatStyle = FlatStyle.Flat,
+            Cursor = Cursors.Hand
+        };
+        btnCopyCroppedImage.FlatAppearance.BorderSize = 0;
+        btnCopyCroppedImage.Click += (s, e) => CopyCroppedImageToClipboard();
+        tipActions.SetToolTip(btnCopyCroppedImage, "Copy ảnh vào Clipboard (Ctrl+C)");
+        tlpActionButtons.Controls.Add(btnCopyCroppedImage, 2, 0);
+
+        // -------------------------------------------------------------
+        // Scrollable body (Between Header and Bottom Actions)
+        // -------------------------------------------------------------
         pnlPropertiesBody = new Panel
         {
             Dock = DockStyle.Fill,
             AutoScroll = true,
-            BackColor = Color.FromArgb(20, 22, 28),
+            BackColor = Color.FromArgb(32, 35, 42),
             Padding = new Padding(DpiScale(8), DpiScale(6), DpiScale(8), DpiScale(6))
         };
         pnlPropertiesContainer.Controls.Add(pnlPropertiesBody);
         pnlPropertiesHeader.SendToBack();
+        pnlPropertiesActions.SendToBack();
 
         TableLayoutPanel tlpCards = new()
         {
@@ -454,469 +596,342 @@ partial class MainCropperForm
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
             ColumnCount = 1,
-            RowCount = 4,
+            RowCount = 2,
             BackColor = Color.Transparent
         };
         tlpCards.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
         tlpCards.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         tlpCards.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        tlpCards.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        tlpCards.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         pnlPropertiesBody.Controls.Add(tlpCards);
 
         // ---------------------------------------------------------
-        // CARD 1: TỌA ĐỘ & KÍCH THƯỚC (Coordinates & Size)
+        // CARD 0: TỈ LỆ / KÍCH THƯỚC (Aspect Ratios & Dimensions)
+        // ---------------------------------------------------------
+        Panel cardRatioAndSize = new()
+        {
+            Dock = DockStyle.Fill,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            BackColor = Color.FromArgb(40, 44, 54),
+            Padding = new Padding(DpiScale(10), DpiScale(7), DpiScale(10), DpiScale(8)),
+            Margin = new Padding(0, 0, 0, DpiScale(6))
+        };
+        tlpCards.Controls.Add(cardRatioAndSize, 0, 0);
+
+        Label lblRatioAndSizeTitle = new()
+        {
+            Text = "TỈ LỆ / KÍCH THƯỚC",
+            UseMnemonic = false,
+            Font = new Font("Segoe UI Bold", 8F),
+            ForeColor = Color.FromArgb(170, 185, 205),
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            Margin = new Padding(0, 0, 0, DpiScale(4))
+        };
+
+        // --- SECTION 1: TỈ LỆ ---
+        Label lblRatioTitle = new()
+        {
+            Text = "Tỉ lệ:",
+            Font = new Font("Segoe UI Semibold", 8F),
+            ForeColor = Color.White,
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            Margin = new Padding(0, DpiScale(4), 0, DpiScale(3))
+        };
+
+        tlpRatios = new TableLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            ColumnCount = 4,
+            RowCount = 2,
+            BackColor = Color.Transparent,
+            Margin = new Padding(0, 0, 0, DpiScale(6))
+        };
+        tlpRatios.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25F));
+        tlpRatios.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25F));
+        tlpRatios.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25F));
+        tlpRatios.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25F));
+        tlpRatios.RowStyles.Add(new RowStyle(SizeType.Absolute, DpiScale(28)));
+        tlpRatios.RowStyles.Add(new RowStyle(SizeType.Absolute, DpiScale(28)));
+
+        // Section 1 Row 1: 1:1, 3:4, 4:6, 9:16
+        btnRatio1x1 = CreatePresetButton("1:1");
+        btnRatio1x1.Click += (s, e) => ApplyAspectRatio(1, 1, btnRatio1x1);
+        tlpRatios.Controls.Add(btnRatio1x1, 0, 0);
+
+        btnRatio3x4 = CreatePresetButton("3:4");
+        btnRatio3x4.Click += (s, e) => ApplyAspectRatio(3, 4, btnRatio3x4);
+        tlpRatios.Controls.Add(btnRatio3x4, 1, 0);
+
+        btnRatio4x6 = CreatePresetButton("4:6");
+        btnRatio4x6.Click += (s, e) => ApplyAspectRatio(4, 6, btnRatio4x6);
+        tlpRatios.Controls.Add(btnRatio4x6, 2, 0);
+
+        btnRatio9x16 = CreatePresetButton("9:16");
+        btnRatio9x16.Click += (s, e) => ApplyAspectRatio(9, 16, btnRatio9x16);
+        tlpRatios.Controls.Add(btnRatio9x16, 3, 0);
+
+        // Section 1 Row 2: Tự do, 4:3, 6:4, 16:9
+        btnRatioFree = CreatePresetButton("Tự do");
+        btnRatioFree.Click += (s, e) => ApplyAspectRatio(0, 0, btnRatioFree);
+        tlpRatios.Controls.Add(btnRatioFree, 0, 1);
+
+        btnRatio4x3 = CreatePresetButton("4:3");
+        btnRatio4x3.Click += (s, e) => ApplyAspectRatio(4, 3, btnRatio4x3);
+        tlpRatios.Controls.Add(btnRatio4x3, 1, 1);
+
+        btnRatio6x4 = CreatePresetButton("6:4");
+        btnRatio6x4.Click += (s, e) => ApplyAspectRatio(6, 4, btnRatio6x4);
+        tlpRatios.Controls.Add(btnRatio6x4, 2, 1);
+
+        btnRatio16x9 = CreatePresetButton("16:9");
+        btnRatio16x9.Click += (s, e) => ApplyAspectRatio(16, 9, btnRatio16x9);
+        tlpRatios.Controls.Add(btnRatio16x9, 3, 1);
+
+        // --- SECTION 2: KÍCH THƯỚC (PX) ---
+        Label lblSizeTitle = new()
+        {
+            Text = "Kích thước (px):",
+            Font = new Font("Segoe UI Semibold", 8F),
+            ForeColor = Color.White,
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            Margin = new Padding(0, DpiScale(4), 0, DpiScale(3))
+        };
+
+        tlpScreenSizes = new TableLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            ColumnCount = 4,
+            RowCount = 2,
+            BackColor = Color.Transparent,
+            Margin = Padding.Empty
+        };
+        tlpScreenSizes.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25F));
+        tlpScreenSizes.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25F));
+        tlpScreenSizes.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25F));
+        tlpScreenSizes.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25F));
+        tlpScreenSizes.RowStyles.Add(new RowStyle(SizeType.Absolute, DpiScale(28)));
+        tlpScreenSizes.RowStyles.Add(new RowStyle(SizeType.Absolute, DpiScale(28)));
+
+        // Section 2 Row 1
+        btnRes1920x1080 = CreatePresetButton("1920x1080");
+        btnRes1920x1080.Click += (s, e) => ApplyScreenResolution(1920, 1080);
+        tlpScreenSizes.Controls.Add(btnRes1920x1080, 0, 0);
+
+        btnRes1600x900 = CreatePresetButton("1600x900");
+        btnRes1600x900.Click += (s, e) => ApplyScreenResolution(1600, 900);
+        tlpScreenSizes.Controls.Add(btnRes1600x900, 1, 0);
+
+        btnRes1366x768 = CreatePresetButton("1366x768");
+        btnRes1366x768.Click += (s, e) => ApplyScreenResolution(1366, 768);
+        tlpScreenSizes.Controls.Add(btnRes1366x768, 2, 0);
+
+        btnRes1280x720 = CreatePresetButton("1280x720");
+        btnRes1280x720.Click += (s, e) => ApplyScreenResolution(1280, 720);
+        tlpScreenSizes.Controls.Add(btnRes1280x720, 3, 0);
+
+        // Section 2 Row 2
+        btnRes2560x1440 = CreatePresetButton("2560x1440");
+        btnRes2560x1440.Click += (s, e) => ApplyScreenResolution(2560, 1440);
+        tlpScreenSizes.Controls.Add(btnRes2560x1440, 0, 1);
+
+        btnRes1440x900 = CreatePresetButton("1440x900");
+        btnRes1440x900.Click += (s, e) => ApplyScreenResolution(1440, 900);
+        tlpScreenSizes.Controls.Add(btnRes1440x900, 1, 1);
+
+        btnRes1024x768 = CreatePresetButton("1024x768");
+        btnRes1024x768.Click += (s, e) => ApplyScreenResolution(1024, 768);
+        tlpScreenSizes.Controls.Add(btnRes1024x768, 2, 1);
+
+        btnRes800x600 = CreatePresetButton("800x600");
+        btnRes800x600.Click += (s, e) => ApplyScreenResolution(800, 600);
+        tlpScreenSizes.Controls.Add(btnRes800x600, 3, 1);
+
+        // Stack controls in cardRatioAndSize (reverse order for Dock = Top)
+        cardRatioAndSize.Controls.Add(tlpScreenSizes);
+        cardRatioAndSize.Controls.Add(lblSizeTitle);
+        cardRatioAndSize.Controls.Add(tlpRatios);
+        cardRatioAndSize.Controls.Add(lblRatioTitle);
+        cardRatioAndSize.Controls.Add(lblRatioAndSizeTitle);
+
+        // ---------------------------------------------------------
+        // CARD 1: TỌA ĐỘ, KÍCH THƯỚC & DI CHUYỂN (Merged Card)
         // ---------------------------------------------------------
         Panel cardCoords = new()
         {
             Dock = DockStyle.Fill,
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            BackColor = Color.FromArgb(26, 29, 39),
-            Padding = new Padding(DpiScale(10), DpiScale(6), DpiScale(10), DpiScale(8)),
-            Margin = new Padding(0, 0, 0, DpiScale(6))
+            BackColor = Color.FromArgb(40, 44, 54),
+            Padding = new Padding(DpiScale(10), DpiScale(7), DpiScale(10), DpiScale(8)),
+            Margin = Padding.Empty
         };
-        tlpCards.Controls.Add(cardCoords, 0, 0);
+        tlpCards.Controls.Add(cardCoords, 0, 1);
 
-        Label lblCard1Title = new()
+        Label lblCoordsTitle = new()
         {
             Text = "TỌA ĐỘ & KÍCH THƯỚC (px)",
+            UseMnemonic = false,
             Font = new Font("Segoe UI Bold", 8F),
-            ForeColor = Color.FromArgb(142, 154, 168),
+            ForeColor = Color.FromArgb(170, 185, 205),
             Dock = DockStyle.Top,
             AutoSize = true,
-            Margin = new Padding(0, 0, 0, DpiScale(4))
+            Margin = new Padding(0, 0, 0, DpiScale(5))
         };
-        cardCoords.Controls.Add(lblCard1Title);
 
-        FlowLayoutPanel pnlCard1Body = new()
+        TableLayoutPanel tlpCoords = new()
         {
             Dock = DockStyle.Top,
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            FlowDirection = FlowDirection.TopDown,
+            ColumnCount = 4,
+            RowCount = 2,
+            BackColor = Color.Transparent,
+            Margin = new Padding(0, DpiScale(2), 0, 0)
+        };
+        tlpCoords.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, DpiScale(26)));
+        tlpCoords.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+        tlpCoords.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, DpiScale(26)));
+        tlpCoords.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+        tlpCoords.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        tlpCoords.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
+        // Left Column: X (Row 0), Y (Row 1)
+        lblX = CreateParamLabel("X:", 0, 0);
+        lblX.Dock = DockStyle.Fill;
+        lblX.TextAlign = ContentAlignment.MiddleRight;
+        lblX.Margin = new Padding(0, 0, DpiScale(4), DpiScale(4));
+        tlpCoords.Controls.Add(lblX, 0, 0);
+
+        numX = CreateNumberBox(0, 0, DpiScale(75));
+        numX.Dock = DockStyle.Fill;
+        numX.Margin = new Padding(0, 0, DpiScale(10), DpiScale(4));
+        numX.ValueChanged += (s, e) => OnNumericInputChanged();
+        tlpCoords.Controls.Add(numX, 1, 0);
+
+        lblY = CreateParamLabel("Y:", 0, 0);
+        lblY.Dock = DockStyle.Fill;
+        lblY.TextAlign = ContentAlignment.MiddleRight;
+        lblY.Margin = new Padding(0, 0, DpiScale(4), 0);
+        tlpCoords.Controls.Add(lblY, 0, 1);
+
+        numY = CreateNumberBox(0, 0, DpiScale(75));
+        numY.Dock = DockStyle.Fill;
+        numY.Margin = new Padding(0, 0, DpiScale(10), 0);
+        numY.ValueChanged += (s, e) => OnNumericInputChanged();
+        tlpCoords.Controls.Add(numY, 1, 1);
+
+        // Right Column: W (Row 0), H (Row 1)
+        lblW = CreateParamLabel("W:", 0, 0);
+        lblW.Dock = DockStyle.Fill;
+        lblW.TextAlign = ContentAlignment.MiddleRight;
+        lblW.Margin = new Padding(0, 0, DpiScale(4), DpiScale(4));
+        tlpCoords.Controls.Add(lblW, 2, 0);
+
+        numW = CreateNumberBox(0, 0, DpiScale(75));
+        numW.Dock = DockStyle.Fill;
+        numW.Margin = new Padding(0, 0, 0, DpiScale(4));
+        numW.ValueChanged += (s, e) => OnNumericInputChanged();
+        tlpCoords.Controls.Add(numW, 3, 0);
+
+        lblH = CreateParamLabel("H:", 0, 0);
+        lblH.Dock = DockStyle.Fill;
+        lblH.TextAlign = ContentAlignment.MiddleRight;
+        lblH.Margin = new Padding(0, 0, DpiScale(4), 0);
+        tlpCoords.Controls.Add(lblH, 2, 1);
+
+        numH = CreateNumberBox(0, 0, DpiScale(75));
+        numH.Dock = DockStyle.Fill;
+        numH.Margin = Padding.Empty;
+        numH.ValueChanged += (s, e) => OnNumericInputChanged();
+        tlpCoords.Controls.Add(numH, 3, 1);
+
+        FlowLayoutPanel rowNudgeControls = new()
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            FlowDirection = FlowDirection.LeftToRight,
             WrapContents = false,
             BackColor = Color.Transparent,
             Margin = Padding.Empty,
-            Padding = new Padding(0, DpiScale(2), 0, 0)
+            Padding = new Padding(0, DpiScale(6), 0, 0)
         };
-        cardCoords.Controls.Add(pnlCard1Body);
-        lblCard1Title.SendToBack();
 
-        // Row 1: X & Y
-        FlowLayoutPanel rowXY = new()
-        {
-            AutoSize = true,
-            FlowDirection = FlowDirection.LeftToRight,
-            WrapContents = false,
-            BackColor = Color.Transparent,
-            Margin = new Padding(0, 0, 0, DpiScale(3))
-        };
-        pnlCard1Body.Controls.Add(rowXY);
+        btnNudgeLeft = CreateToolButton(IconChar.ArrowLeft, 0, 0, DpiScale(30), DpiScale(26));
+        btnNudgeLeft.Margin = new Padding(0, 0, DpiScale(2), 0);
+        btnNudgeLeft.Click += (s, e) => NudgeCrop(-GetNudgeStep(), 0);
+        tipActions.SetToolTip(btnNudgeLeft, "Di chuyển sang trái (Mũi tên Trái)");
+        rowNudgeControls.Controls.Add(btnNudgeLeft);
 
-        lblX = CreateParamLabel("X:", 0, 0);
-        lblX.Margin = new Padding(0, DpiScale(4), DpiScale(2), 0);
-        numX = CreateNumberBox(0, 0, DpiScale(78));
-        numX.Margin = new Padding(0, 0, DpiScale(12), 0);
-        numX.ValueChanged += (s, e) => OnNumericInputChanged();
-        rowXY.Controls.Add(lblX);
-        rowXY.Controls.Add(numX);
+        btnNudgeUp = CreateToolButton(IconChar.ArrowUp, 0, 0, DpiScale(30), DpiScale(26));
+        btnNudgeUp.Margin = new Padding(0, 0, DpiScale(2), 0);
+        btnNudgeUp.Click += (s, e) => NudgeCrop(0, -GetNudgeStep());
+        tipActions.SetToolTip(btnNudgeUp, "Di chuyển lên trên (Mũi tên Lên)");
+        rowNudgeControls.Controls.Add(btnNudgeUp);
 
-        lblY = CreateParamLabel("Y:", 0, 0);
-        lblY.Margin = new Padding(0, DpiScale(4), DpiScale(2), 0);
-        numY = CreateNumberBox(0, 0, DpiScale(78));
-        numY.Margin = Padding.Empty;
-        numY.ValueChanged += (s, e) => OnNumericInputChanged();
-        rowXY.Controls.Add(lblY);
-        rowXY.Controls.Add(numY);
+        btnNudgeDown = CreateToolButton(IconChar.ArrowDown, 0, 0, DpiScale(30), DpiScale(26));
+        btnNudgeDown.Margin = new Padding(0, 0, DpiScale(2), 0);
+        btnNudgeDown.Click += (s, e) => NudgeCrop(0, GetNudgeStep());
+        tipActions.SetToolTip(btnNudgeDown, "Di chuyển xuống dưới (Mũi tên Xuống)");
+        rowNudgeControls.Controls.Add(btnNudgeDown);
 
-        // Row 2: W & H
-        FlowLayoutPanel rowWH = new()
-        {
-            AutoSize = true,
-            FlowDirection = FlowDirection.LeftToRight,
-            WrapContents = false,
-            BackColor = Color.Transparent,
-            Margin = new Padding(0, 0, 0, DpiScale(3))
-        };
-        pnlCard1Body.Controls.Add(rowWH);
+        btnNudgeRight = CreateToolButton(IconChar.ArrowRight, 0, 0, DpiScale(30), DpiScale(26));
+        btnNudgeRight.Margin = new Padding(0, 0, DpiScale(4), 0);
+        btnNudgeRight.Click += (s, e) => NudgeCrop(GetNudgeStep(), 0);
+        tipActions.SetToolTip(btnNudgeRight, "Di chuyển sang phải (Mũi tên Phải)");
+        rowNudgeControls.Controls.Add(btnNudgeRight);
 
-        lblW = CreateParamLabel("W:", 0, 0);
-        lblW.Margin = new Padding(0, DpiScale(4), DpiScale(2), 0);
-        numW = CreateNumberBox(0, 0, DpiScale(78));
-        numW.Margin = new Padding(0, 0, DpiScale(12), 0);
-        numW.ValueChanged += (s, e) => OnNumericInputChanged();
-        rowWH.Controls.Add(lblW);
-        rowWH.Controls.Add(numW);
-
-        lblH = CreateParamLabel("H:", 0, 0);
-        lblH.Margin = new Padding(0, DpiScale(4), DpiScale(2), 0);
-        numH = CreateNumberBox(0, 0, DpiScale(78));
-        numH.Margin = Padding.Empty;
-        numH.ValueChanged += (s, e) => OnNumericInputChanged();
-        rowWH.Controls.Add(lblH);
-        rowWH.Controls.Add(numH);
-
-        // Row 3: Ratio
-        lblAspectRatio = new Label
-        {
-            Text = "Tỉ lệ: 4:3",
-            ForeColor = Color.FromArgb(0, 215, 255),
-            Font = new Font("Segoe UI Semibold", 8.5F),
-            AutoSize = true,
-            Margin = new Padding(DpiScale(2), DpiScale(1), 0, 0)
-        };
-        pnlCard1Body.Controls.Add(lblAspectRatio);
-
-        // ---------------------------------------------------------
-        // CARD 2: DI CHUYỂN VÙNG CHỌN (Nudge / D-Pad)
-        // ---------------------------------------------------------
-        Panel cardNudge = new()
-        {
-            Dock = DockStyle.Fill,
-            AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            BackColor = Color.FromArgb(26, 29, 39),
-            Padding = new Padding(DpiScale(10), DpiScale(6), DpiScale(10), DpiScale(8)),
-            Margin = new Padding(0, 0, 0, DpiScale(6))
-        };
-        tlpCards.Controls.Add(cardNudge, 0, 1);
-
-        FlowLayoutPanel rowNudgeHead = new()
-        {
-            Dock = DockStyle.Top,
-            AutoSize = true,
-            FlowDirection = FlowDirection.LeftToRight,
-            WrapContents = false,
-            BackColor = Color.Transparent,
-            Margin = Padding.Empty
-        };
-        cardNudge.Controls.Add(rowNudgeHead);
-
-        Label lblNudgeTitle = new()
-        {
-            Text = "DI CHUYỂN (D-PAD)",
-            Font = new Font("Segoe UI Bold", 8F),
-            ForeColor = Color.FromArgb(142, 154, 168),
-            AutoSize = true,
-            Margin = new Padding(0, DpiScale(3), DpiScale(14), 0)
-        };
-        rowNudgeHead.Controls.Add(lblNudgeTitle);
+        btnCenterBox = CreateCenterButton("Căn giữa", IconChar.Bullseye, 0, 0, DpiScale(78), DpiScale(26));
+        btnCenterBox.Margin = new Padding(0, 0, DpiScale(6), 0);
+        btnCenterBox.Click += (s, e) => CenterCropBox();
+        tipActions.SetToolTip(btnCenterBox, "Căn giữa vùng chọn vào khung ảnh");
+        rowNudgeControls.Controls.Add(btnCenterBox);
 
         Label lblStep = new()
         {
             Text = "Bước:",
             Font = new Font("Segoe UI", 8F),
-            ForeColor = Color.FromArgb(170, 185, 205),
+            ForeColor = Color.White,
             AutoSize = true,
-            Margin = new Padding(0, DpiScale(3), DpiScale(4), 0)
+            Margin = new Padding(DpiScale(2), DpiScale(5), DpiScale(2), 0)
         };
-        rowNudgeHead.Controls.Add(lblStep);
+        rowNudgeControls.Controls.Add(lblStep);
 
         cboNudgeStep = new ComboBox
         {
-            Width = DpiScale(64),
+            Width = DpiScale(62),
             DropDownStyle = ComboBoxStyle.DropDownList,
+            FlatStyle = FlatStyle.Flat,
             DrawMode = DrawMode.OwnerDrawFixed,
             ItemHeight = DpiScale(18),
-            BackColor = Color.FromArgb(40, 44, 56),
+            BackColor = Color.FromArgb(50, 55, 68),
             ForeColor = Color.White,
             Font = new Font("Segoe UI Semibold", 8F),
-            Margin = Padding.Empty
+            Margin = new Padding(0, DpiScale(1), 0, 0)
         };
         cboNudgeStep.Items.AddRange(["1px", "5px", "10px", "50px"]);
         cboNudgeStep.SelectedIndex = 1;
         cboNudgeStep.DrawItem += (s, e) =>
         {
             if (e.Index < 0) return;
-            using SolidBrush bg = new(Color.FromArgb(40, 44, 56));
+            using SolidBrush bg = new(Color.FromArgb(50, 55, 68));
             using SolidBrush fg = new(Color.White);
             e.Graphics.FillRectangle(bg, e.Bounds);
             StringFormat sf = new() { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
-            e.Graphics.DrawString(cboNudgeStep.Items[e.Index].ToString(), cboNudgeStep.Font, fg, e.Bounds, sf);
+            e.Graphics.DrawString(cboNudgeStep.Items[e.Index]?.ToString() ?? "", cboNudgeStep.Font, fg, e.Bounds, sf);
         };
-        rowNudgeHead.Controls.Add(cboNudgeStep);
+        rowNudgeControls.Controls.Add(cboNudgeStep);
 
-        FlowLayoutPanel rowNudgeBtns = new()
-        {
-            Dock = DockStyle.Top,
-            AutoSize = true,
-            FlowDirection = FlowDirection.LeftToRight,
-            WrapContents = false,
-            BackColor = Color.Transparent,
-            Margin = Padding.Empty,
-            Padding = new Padding(0, DpiScale(5), 0, 0)
-        };
-        cardNudge.Controls.Add(rowNudgeBtns);
-        rowNudgeHead.SendToBack();
-
-        btnNudgeLeft = CreateToolButton(IconChar.ArrowLeft, 0, 0, DpiScale(32), DpiScale(26));
-        btnNudgeLeft.Margin = new Padding(0, 0, DpiScale(3), 0);
-        btnNudgeLeft.Click += (s, e) => NudgeCrop(-GetNudgeStep(), 0);
-        rowNudgeBtns.Controls.Add(btnNudgeLeft);
-
-        btnNudgeUp = CreateToolButton(IconChar.ArrowUp, 0, 0, DpiScale(32), DpiScale(26));
-        btnNudgeUp.Margin = new Padding(0, 0, DpiScale(3), 0);
-        btnNudgeUp.Click += (s, e) => NudgeCrop(0, -GetNudgeStep());
-        rowNudgeBtns.Controls.Add(btnNudgeUp);
-
-        btnNudgeDown = CreateToolButton(IconChar.ArrowDown, 0, 0, DpiScale(32), DpiScale(26));
-        btnNudgeDown.Margin = new Padding(0, 0, DpiScale(3), 0);
-        btnNudgeDown.Click += (s, e) => NudgeCrop(0, GetNudgeStep());
-        rowNudgeBtns.Controls.Add(btnNudgeDown);
-
-        btnNudgeRight = CreateToolButton(IconChar.ArrowRight, 0, 0, DpiScale(32), DpiScale(26));
-        btnNudgeRight.Margin = new Padding(0, 0, DpiScale(8), 0);
-        btnNudgeRight.Click += (s, e) => NudgeCrop(GetNudgeStep(), 0);
-        rowNudgeBtns.Controls.Add(btnNudgeRight);
-
-        btnCenterBox = CreateCenterButton("Căn giữa", IconChar.Bullseye, 0, 0, DpiScale(90), DpiScale(26));
-        btnCenterBox.Margin = Padding.Empty;
-        btnCenterBox.Click += (s, e) => CenterCropBox();
-        rowNudgeBtns.Controls.Add(btnCenterBox);
-
-        // ---------------------------------------------------------
-        // CARD 3: THAY ĐỔI SIZE NHANH (Quick Size Adjust)
-        // ---------------------------------------------------------
-        Panel cardSize = new()
-        {
-            Dock = DockStyle.Fill,
-            AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            BackColor = Color.FromArgb(26, 29, 39),
-            Padding = new Padding(DpiScale(10), DpiScale(6), DpiScale(10), DpiScale(8)),
-            Margin = new Padding(0, 0, 0, DpiScale(6))
-        };
-        tlpCards.Controls.Add(cardSize, 0, 2);
-
-        Label lblCard3Title = new()
-        {
-            Text = "THAY ĐỔI SIZE NHANH",
-            Font = new Font("Segoe UI Bold", 8F),
-            ForeColor = Color.FromArgb(142, 154, 168),
-            Dock = DockStyle.Top,
-            AutoSize = true,
-            Margin = new Padding(0, 0, 0, DpiScale(4))
-        };
-        cardSize.Controls.Add(lblCard3Title);
-
-        FlowLayoutPanel pnlCard3Body = new()
-        {
-            Dock = DockStyle.Top,
-            AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            FlowDirection = FlowDirection.TopDown,
-            WrapContents = false,
-            BackColor = Color.Transparent,
-            Margin = Padding.Empty,
-            Padding = new Padding(0, DpiScale(2), 0, 0)
-        };
-        cardSize.Controls.Add(pnlCard3Body);
-        lblCard3Title.SendToBack();
-
-        // Row W
-        FlowLayoutPanel rowW = new()
-        {
-            AutoSize = true,
-            FlowDirection = FlowDirection.LeftToRight,
-            WrapContents = false,
-            BackColor = Color.Transparent,
-            Margin = new Padding(0, 0, 0, DpiScale(3))
-        };
-        pnlCard3Body.Controls.Add(rowW);
-
-        Label lblWTitle = new()
-        {
-            Text = "Rộng (W):",
-            Font = new Font("Segoe UI Semibold", 8F),
-            ForeColor = Color.FromArgb(170, 185, 205),
-            Width = DpiScale(58),
-            AutoSize = false,
-            Margin = new Padding(0, DpiScale(4), 0, 0)
-        };
-        rowW.Controls.Add(lblWTitle);
-
-        btnWMinus10 = CreateMiniButton("-10", 0, 0, DpiScale(40), DpiScale(23));
-        btnWMinus10.Margin = new Padding(0, 0, DpiScale(3), 0);
-        btnWMinus10.Click += (s, e) => ResizeCrop(-10, 0);
-        rowW.Controls.Add(btnWMinus10);
-
-        btnWMinus1 = CreateMiniButton("-1", 0, 0, DpiScale(34), DpiScale(23));
-        btnWMinus1.Margin = new Padding(0, 0, DpiScale(3), 0);
-        btnWMinus1.Click += (s, e) => ResizeCrop(-1, 0);
-        rowW.Controls.Add(btnWMinus1);
-
-        btnWPlus1 = CreateMiniButton("+1", 0, 0, DpiScale(34), DpiScale(23));
-        btnWPlus1.Margin = new Padding(0, 0, DpiScale(3), 0);
-        btnWPlus1.Click += (s, e) => ResizeCrop(1, 0);
-        rowW.Controls.Add(btnWPlus1);
-
-        btnWPlus10 = CreateMiniButton("+10", 0, 0, DpiScale(40), DpiScale(23));
-        btnWPlus10.Margin = Padding.Empty;
-        btnWPlus10.Click += (s, e) => ResizeCrop(10, 0);
-        rowW.Controls.Add(btnWPlus10);
-
-        // Row H
-        FlowLayoutPanel rowH = new()
-        {
-            AutoSize = true,
-            FlowDirection = FlowDirection.LeftToRight,
-            WrapContents = false,
-            BackColor = Color.Transparent,
-            Margin = Padding.Empty
-        };
-        pnlCard3Body.Controls.Add(rowH);
-
-        Label lblHTitle = new()
-        {
-            Text = "Cao (H):",
-            Font = new Font("Segoe UI Semibold", 8F),
-            ForeColor = Color.FromArgb(170, 185, 205),
-            Width = DpiScale(58),
-            AutoSize = false,
-            Margin = new Padding(0, DpiScale(4), 0, 0)
-        };
-        rowH.Controls.Add(lblHTitle);
-
-        btnHMinus10 = CreateMiniButton("-10", 0, 0, DpiScale(40), DpiScale(23));
-        btnHMinus10.Margin = new Padding(0, 0, DpiScale(3), 0);
-        btnHMinus10.Click += (s, e) => ResizeCrop(0, -10);
-        rowH.Controls.Add(btnHMinus10);
-
-        btnHMinus1 = CreateMiniButton("-1", 0, 0, DpiScale(34), DpiScale(23));
-        btnHMinus1.Margin = new Padding(0, 0, DpiScale(3), 0);
-        btnHMinus1.Click += (s, e) => ResizeCrop(0, -1);
-        rowH.Controls.Add(btnHMinus1);
-
-        btnHPlus1 = CreateMiniButton("+1", 0, 0, DpiScale(34), DpiScale(23));
-        btnHPlus1.Margin = new Padding(0, 0, DpiScale(3), 0);
-        btnHPlus1.Click += (s, e) => ResizeCrop(0, 1);
-        rowH.Controls.Add(btnHPlus1);
-
-        btnHPlus10 = CreateMiniButton("+10", 0, 0, DpiScale(40), DpiScale(23));
-        btnHPlus10.Margin = Padding.Empty;
-        btnHPlus10.Click += (s, e) => ResizeCrop(0, 10);
-        rowH.Controls.Add(btnHPlus10);
-
-        // ---------------------------------------------------------
-        // CARD 4: HÀNH ĐỘNG (Actions)
-        // ---------------------------------------------------------
-        Panel cardActions = new()
-        {
-            Dock = DockStyle.Fill,
-            AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            BackColor = Color.FromArgb(26, 29, 39),
-            Padding = new Padding(DpiScale(10), DpiScale(6), DpiScale(10), DpiScale(8)),
-            Margin = new Padding(0, 0, 0, DpiScale(6))
-        };
-        tlpCards.Controls.Add(cardActions, 0, 3);
-
-        Label lblCard4Title = new()
-        {
-            Text = "HÀNH ĐỘNG",
-            Font = new Font("Segoe UI Bold", 8F),
-            ForeColor = Color.FromArgb(142, 154, 168),
-            Dock = DockStyle.Top,
-            AutoSize = true,
-            Margin = new Padding(0, 0, 0, DpiScale(4))
-        };
-        cardActions.Controls.Add(lblCard4Title);
-
-        FlowLayoutPanel pnlCard4Body = new()
-        {
-            Dock = DockStyle.Top,
-            AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            FlowDirection = FlowDirection.TopDown,
-            WrapContents = false,
-            BackColor = Color.Transparent,
-            Margin = Padding.Empty,
-            Padding = new Padding(0, DpiScale(2), 0, 0)
-        };
-        cardActions.Controls.Add(pnlCard4Body);
-        lblCard4Title.SendToBack();
-
-        btnSaveCoordinates = new IconButton
-        {
-            Text = " LƯU TỌA ĐỘ",
-            UseMnemonic = false,
-            IconChar = IconChar.FloppyDisk,
-            IconColor = Color.White,
-            IconSize = DpiScale(16),
-            TextImageRelation = TextImageRelation.ImageBeforeText,
-            ImageAlign = ContentAlignment.MiddleLeft,
-            TextAlign = ContentAlignment.MiddleCenter,
-            Padding = new Padding(DpiScale(10), 0, DpiScale(10), 0),
-            Margin = new Padding(0, 0, 0, DpiScale(4)),
-            Width = DpiScale(250),
-            Height = DpiScale(32),
-            BackColor = Color.FromArgb(0, 180, 216),
-            ForeColor = Color.White,
-            Font = new Font("Segoe UI Bold", 8.5F),
-            FlatStyle = FlatStyle.Flat,
-            Cursor = Cursors.Hand
-        };
-        btnSaveCoordinates.FlatAppearance.BorderSize = 0;
-        btnSaveCoordinates.Click += (s, e) => SaveCurrentCoordinates();
-        pnlCard4Body.Controls.Add(btnSaveCoordinates);
-
-        btnCropAndSaveImage = new IconButton
-        {
-            Text = " CẮT & LƯU ẢNH (Ctrl+S)",
-            UseMnemonic = false,
-            IconChar = IconChar.Crop,
-            IconColor = Color.White,
-            IconSize = DpiScale(16),
-            TextImageRelation = TextImageRelation.ImageBeforeText,
-            ImageAlign = ContentAlignment.MiddleLeft,
-            TextAlign = ContentAlignment.MiddleCenter,
-            Padding = new Padding(DpiScale(10), 0, DpiScale(10), 0),
-            Margin = new Padding(0, 0, 0, DpiScale(4)),
-            Width = DpiScale(250),
-            Height = DpiScale(32),
-            BackColor = Color.FromArgb(16, 185, 129),
-            ForeColor = Color.White,
-            Font = new Font("Segoe UI Bold", 8.5F),
-            FlatStyle = FlatStyle.Flat,
-            Cursor = Cursors.Hand
-        };
-        btnCropAndSaveImage.FlatAppearance.BorderSize = 0;
-        btnCropAndSaveImage.Click += (s, e) => CropAndSaveImage();
-        pnlCard4Body.Controls.Add(btnCropAndSaveImage);
-
-        btnCopyCroppedImage = new IconButton
-        {
-            Text = " COPY ẢNH (Ctrl+C)",
-            UseMnemonic = false,
-            IconChar = IconChar.Copy,
-            IconColor = Color.White,
-            IconSize = DpiScale(15),
-            TextImageRelation = TextImageRelation.ImageBeforeText,
-            ImageAlign = ContentAlignment.MiddleLeft,
-            TextAlign = ContentAlignment.MiddleCenter,
-            Padding = new Padding(DpiScale(10), 0, DpiScale(10), 0),
-            Margin = Padding.Empty,
-            Width = DpiScale(250),
-            Height = DpiScale(28),
-            BackColor = Color.FromArgb(48, 54, 70),
-            ForeColor = Color.FromArgb(235, 240, 255),
-            Font = new Font("Segoe UI Semibold", 8.5F),
-            FlatStyle = FlatStyle.Flat,
-            Cursor = Cursors.Hand
-        };
-        btnCopyCroppedImage.FlatAppearance.BorderSize = 0;
-        btnCopyCroppedImage.Click += (s, e) => CopyCroppedImageToClipboard();
-        pnlCard4Body.Controls.Add(btnCopyCroppedImage);
-
-        // Adjust action buttons width on body resize
-        pnlPropertiesBody.Resize += (s, e) =>
-        {
-            int w = Math.Max(DpiScale(200), pnlPropertiesBody.ClientSize.Width - DpiScale(24));
-            btnSaveCoordinates.Width = w;
-            btnCropAndSaveImage.Width = w;
-            btnCopyCroppedImage.Width = w;
-        };
+        // Stack controls in cardCoords (reverse order for Dock = Top)
+        cardCoords.Controls.Add(rowNudgeControls);
+        cardCoords.Controls.Add(tlpCoords);
+        cardCoords.Controls.Add(lblCoordsTitle);
     }
 
     private void InitializeSavedSection()
@@ -924,19 +939,19 @@ partial class MainCropperForm
         pnlSavedHeader = new Panel
         {
             Dock = DockStyle.Top,
-            Height = DpiScale(40),
-            BackColor = Color.FromArgb(30, 34, 46),
-            Padding = new Padding(DpiScale(14), DpiScale(6), DpiScale(14), DpiScale(6))
+            Height = DpiScale(38),
+            BackColor = Color.FromArgb(42, 46, 56),
+            Padding = new Padding(DpiScale(14), DpiScale(4), DpiScale(14), DpiScale(4))
         };
         pnlSavedSection.Controls.Add(pnlSavedHeader);
 
         picSavedIcon = new IconPictureBox
         {
             IconChar = IconChar.RectangleList,
-            IconColor = Color.FromArgb(0, 220, 255),
+            IconColor = Color.White,
             IconSize = DpiScale(16),
             Size = new Size(DpiScale(18), DpiScale(18)),
-            Location = new Point(DpiScale(14), DpiScale(11)),
+            Location = new Point(DpiScale(14), DpiScale(10)),
             BackColor = Color.Transparent
         };
         pnlSavedHeader.Controls.Add(picSavedIcon);
@@ -945,9 +960,9 @@ partial class MainCropperForm
         {
             Text = "DANH SÁCH ĐÃ LƯU (TỌA ĐỘ & HÌNH ẢNH): 0 mục",
             UseMnemonic = false,
-            Font = new Font("Segoe UI Bold", 9.5F),
-            ForeColor = Color.FromArgb(0, 220, 255),
-            Location = new Point(picSavedIcon.Right + DpiScale(8), DpiScale(10)),
+            Font = new Font("Segoe UI Bold", 9F),
+            ForeColor = Color.White,
+            Location = new Point(picSavedIcon.Right + DpiScale(8), DpiScale(9)),
             AutoSize = true
         };
         pnlSavedHeader.Controls.Add(lblSavedTitle);
@@ -976,7 +991,7 @@ partial class MainCropperForm
         btnImportJson.Click += (s, e) => ImportRegionsFromJson();
         pnlSavedHeaderActions.Controls.Add(btnImportJson);
 
-        btnClearAll = CreateListHeaderButton("Xóa hết", IconChar.TrashCan, 0, Color.FromArgb(70, 45, 55), Color.FromArgb(255, 160, 160));
+        btnClearAll = CreateListHeaderButton("Xóa hết", IconChar.TrashCan, 0, Color.FromArgb(70, 40, 48), Color.FromArgb(255, 160, 160));
         btnClearAll.Click += (s, e) => ClearAllSavedRegions();
         pnlSavedHeaderActions.Controls.Add(btnClearAll);
 
@@ -984,11 +999,11 @@ partial class MainCropperForm
         dgvSavedRegions = new DataGridView
         {
             Dock = DockStyle.Fill,
-            BackgroundColor = Color.FromArgb(18, 20, 26),
-            ForeColor = Color.FromArgb(230, 235, 245),
+            BackgroundColor = Color.FromArgb(28, 31, 38),
+            ForeColor = Color.White,
             BorderStyle = BorderStyle.None,
             CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal,
-            GridColor = Color.FromArgb(34, 38, 48),
+            GridColor = Color.FromArgb(48, 52, 64),
             RowHeadersVisible = false,
             ColumnHeadersVisible = true,
             AllowUserToAddRows = false,
@@ -1004,19 +1019,19 @@ partial class MainCropperForm
 
         dgvSavedRegions.EnableHeadersVisualStyles = false;
         dgvSavedRegions.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
-        dgvSavedRegions.ColumnHeadersHeight = DpiScale(34);
+        dgvSavedRegions.ColumnHeadersHeight = DpiScale(32);
         dgvSavedRegions.RowTemplate.Height = DpiScale(28);
         dgvSavedRegions.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.Single;
-        dgvSavedRegions.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(28, 33, 46);
-        dgvSavedRegions.ColumnHeadersDefaultCellStyle.ForeColor = Color.FromArgb(0, 215, 255);
+        dgvSavedRegions.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(42, 46, 56);
+        dgvSavedRegions.ColumnHeadersDefaultCellStyle.ForeColor = Color.White;
         dgvSavedRegions.ColumnHeadersDefaultCellStyle.Font = new Font("Segoe UI Semibold", 8.5F);
         dgvSavedRegions.ColumnHeadersDefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
 
-        dgvSavedRegions.DefaultCellStyle.BackColor = Color.FromArgb(22, 25, 33);
-        dgvSavedRegions.DefaultCellStyle.ForeColor = Color.FromArgb(230, 235, 245);
-        dgvSavedRegions.DefaultCellStyle.SelectionBackColor = Color.FromArgb(0, 119, 182);
+        dgvSavedRegions.DefaultCellStyle.BackColor = Color.FromArgb(34, 38, 46);
+        dgvSavedRegions.DefaultCellStyle.ForeColor = Color.White;
+        dgvSavedRegions.DefaultCellStyle.SelectionBackColor = Color.FromArgb(54, 70, 96);
         dgvSavedRegions.DefaultCellStyle.SelectionForeColor = Color.White;
-        dgvSavedRegions.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(26, 30, 40);
+        dgvSavedRegions.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(38, 42, 52);
 
         // Columns definition with clear titles and alignment
         var colIdx = new DataGridViewTextBoxColumn { Name = "ColIndex", HeaderText = "#", Width = DpiScale(42) };
@@ -1113,7 +1128,7 @@ partial class MainCropperForm
             Margin = new Padding(0, 0, DpiScale(6), 0),
             Height = DpiScale(34),
             AutoSize = true,
-            BackColor = backColor ?? Color.FromArgb(42, 47, 60),
+            BackColor = backColor ?? Color.FromArgb(50, 55, 68),
             ForeColor = Color.White,
             FlatStyle = FlatStyle.Flat,
             Font = new Font("Segoe UI Semibold", 8.5F),
@@ -1130,8 +1145,8 @@ partial class MainCropperForm
             Text = text,
             Location = new Point(x, y),
             AutoSize = true,
-            Font = new Font("Segoe UI Semibold", 9F),
-            ForeColor = Color.FromArgb(200, 210, 230)
+            Font = new Font("Segoe UI Semibold", 8.5F),
+            ForeColor = Color.White
         };
     }
 
@@ -1145,7 +1160,7 @@ partial class MainCropperForm
             Minimum = 0,
             Maximum = 10000,
             Value = 0,
-            BackColor = Color.FromArgb(40, 44, 56),
+            BackColor = Color.FromArgb(50, 55, 68),
             ForeColor = Color.White,
             BorderStyle = BorderStyle.FixedSingle,
             Font = new Font("Segoe UI Bold", 9F)
@@ -1157,13 +1172,13 @@ partial class MainCropperForm
         IconButton btn = new()
         {
             IconChar = icon,
-            IconColor = iconColor ?? Color.FromArgb(230, 235, 245),
-            IconSize = DpiScale(15),
+            IconColor = iconColor ?? Color.White,
+            IconSize = DpiScale(14),
             ImageAlign = ContentAlignment.MiddleCenter,
             Location = new Point(x, y),
             Size = new Size(w, h),
-            BackColor = Color.FromArgb(44, 49, 64),
-            ForeColor = Color.FromArgb(230, 235, 245),
+            BackColor = Color.FromArgb(50, 55, 68),
+            ForeColor = Color.White,
             FlatStyle = FlatStyle.Flat,
             Cursor = Cursors.Hand
         };
@@ -1178,16 +1193,16 @@ partial class MainCropperForm
             Text = " " + text,
             UseMnemonic = false,
             IconChar = icon,
-            IconColor = Color.FromArgb(230, 235, 245),
-            IconSize = DpiScale(14),
+            IconColor = Color.White,
+            IconSize = DpiScale(13),
             TextImageRelation = TextImageRelation.ImageBeforeText,
             ImageAlign = ContentAlignment.MiddleLeft,
             TextAlign = ContentAlignment.MiddleLeft,
-            Padding = new Padding(DpiScale(6), 0, DpiScale(6), 0),
+            Padding = new Padding(DpiScale(4), 0, DpiScale(4), 0),
             Location = new Point(x, y),
             Size = new Size(w, h),
-            BackColor = Color.FromArgb(44, 49, 64),
-            ForeColor = Color.FromArgb(230, 235, 245),
+            BackColor = Color.FromArgb(50, 55, 68),
+            ForeColor = Color.White,
             FlatStyle = FlatStyle.Flat,
             Font = new Font("Segoe UI", 8F),
             Cursor = Cursors.Hand
@@ -1203,10 +1218,10 @@ partial class MainCropperForm
             Text = text,
             Location = new Point(x, y),
             Size = new Size(w, h),
-            BackColor = Color.FromArgb(36, 40, 52),
-            ForeColor = Color.FromArgb(200, 215, 235),
+            BackColor = Color.FromArgb(50, 55, 68),
+            ForeColor = Color.White,
             FlatStyle = FlatStyle.Flat,
-            Font = new Font("Segoe UI", 8F),
+            Font = new Font("Segoe UI Semibold", 8F),
             Cursor = Cursors.Hand
         };
         btn.FlatAppearance.BorderSize = 0;
@@ -1230,11 +1245,31 @@ partial class MainCropperForm
             Location = new Point(x, DpiScale(5)),
             AutoSize = true,
             Height = DpiScale(30),
-            BackColor = bg ?? Color.FromArgb(44, 49, 64),
+            BackColor = bg ?? Color.FromArgb(50, 55, 68),
             ForeColor = Color.White,
             FlatStyle = FlatStyle.Flat,
             Font = new Font("Segoe UI Semibold", 8.5F),
             Cursor = Cursors.Hand
+        };
+        btn.FlatAppearance.BorderSize = 0;
+        return btn;
+    }
+
+    private Button CreatePresetButton(string text)
+    {
+        Button btn = new()
+        {
+            Text = text,
+            Dock = DockStyle.Fill,
+            Height = DpiScale(26),
+            Margin = new Padding(DpiScale(2)),
+            Padding = Padding.Empty,
+            BackColor = Color.FromArgb(50, 55, 68),
+            ForeColor = Color.White,
+            FlatStyle = FlatStyle.Flat,
+            Font = new Font("Segoe UI Semibold", 7.25F),
+            Cursor = Cursors.Hand,
+            UseCompatibleTextRendering = false
         };
         btn.FlatAppearance.BorderSize = 0;
         return btn;
