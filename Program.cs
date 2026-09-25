@@ -487,7 +487,128 @@ static class Program
                 Console.WriteLine("[PASS] Test 13: ExportOptionsDialog layout rendered successfully to export_dialog_render.png.");
             }
 
-            Console.WriteLine(">>> ALL 13 SELF-DIAGNOSTIC TESTS PASSED SUCCESSFULLY! <<<");
+            // Test 14: ImageFilterService (Grayscale & Threshold Binarization) & UI Integration
+            Console.WriteLine("[DEBUG] Starting Test 14: Filter Service & UI integration verification...");
+            using (var testBmp = new Bitmap(10, 10))
+            {
+                // Pixel (0,0): Dark gray (50, 50, 50) -> lum ~50
+                // Pixel (1,0): Bright white (200, 200, 200) -> lum ~200
+                testBmp.SetPixel(0, 0, Color.FromArgb(50, 50, 50));
+                testBmp.SetPixel(1, 0, Color.FromArgb(200, 200, 200));
+
+                // 14.1 Grayscale
+                using var grayBmp = Services.ImageFilterService.ApplyFilters(testBmp, grayscale: true, thresholdEnabled: false, threshold: 128);
+                if (grayBmp == null) throw new Exception("Grayscale filter returned null");
+                Color p0 = grayBmp.GetPixel(0, 0);
+                Color p1 = grayBmp.GetPixel(1, 0);
+                if (p0.R != p0.G || p0.G != p0.B) throw new Exception("Grayscale pixel 0 is not monochromatic");
+                if (p1.R != p1.G || p1.G != p1.B) throw new Exception("Grayscale pixel 1 is not monochromatic");
+
+                // 14.2 Threshold = 128
+                using var threshBmp = Services.ImageFilterService.ApplyFilters(testBmp, grayscale: true, thresholdEnabled: true, threshold: 128);
+                if (threshBmp == null) throw new Exception("Threshold filter returned null");
+                Color tp0 = threshBmp.GetPixel(0, 0);
+                Color tp1 = threshBmp.GetPixel(1, 0);
+                // Lum 50 < 128 => Black (0, 0, 0)
+                if (tp0.R != 0 || tp0.G != 0 || tp0.B != 0) throw new Exception($"Expected black for pixel < 128, got {tp0}");
+                // Lum 200 >= 128 => White (255, 255, 255)
+                if (tp1.R != 255 || tp1.G != 255 || tp1.B != 255) throw new Exception($"Expected white for pixel >= 128, got {tp1}");
+
+                // 14.3 Form UI Integration with Filters
+                using var formFilters = new MainCropperForm();
+                var bindingFlags = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+                var chkGrayField = typeof(MainCropperForm).GetField("chkGrayscale", bindingFlags);
+                var chkThreshField = typeof(MainCropperForm).GetField("chkThreshold", bindingFlags);
+                var trkThreshField = typeof(MainCropperForm).GetField("trkThreshold", bindingFlags);
+                var canvasField = typeof(MainCropperForm).GetField("canvas", bindingFlags);
+
+                var chkGray = (CheckBox)chkGrayField!.GetValue(formFilters)!;
+                var chkThresh = (CheckBox)chkThreshField!.GetValue(formFilters)!;
+                var trkThresh = (TrackBar)trkThreshField!.GetValue(formFilters)!;
+                var canvasCtrl = (Controls.CanvasControl)canvasField!.GetValue(formFilters)!;
+
+                // Load test image to main
+                var mediaTest = new Models.MediaItem { Name = "FilterTest.png", Bitmap = testBmp, Width = 10, Height = 10 };
+                var loadMethod = typeof(MainCropperForm).GetMethod("LoadMediaItemToMain", bindingFlags);
+                loadMethod!.Invoke(formFilters, new object[] { mediaTest });
+
+                // Toggle Grayscale
+                chkGray.Checked = true;
+                if (canvasCtrl.Image == null) throw new Exception("Canvas image null after grayscale toggle");
+
+                // Toggle Threshold
+                chkThresh.Checked = true;
+                if (!trkThresh.Enabled) throw new Exception("Trackbar should be enabled when chkThreshold is checked");
+                trkThresh.Value = 100;
+
+                // Verify cropped image reflects threshold filter
+                canvasCtrl.SetCropRect(new Rectangle(0, 0, 2, 1));
+                using var croppedFiltered = formFilters.GetCroppedBitmap();
+                if (croppedFiltered == null) throw new Exception("Cropped filtered bitmap null");
+                Color c0 = croppedFiltered.GetPixel(0, 0);
+                Color c1 = croppedFiltered.GetPixel(1, 0);
+                if (c0.R != 0 || c0.G != 0 || c0.B != 0) throw new Exception("Cropped pixel 0 should be black");
+                if (c1.R != 255 || c1.G != 255 || c1.B != 255) throw new Exception("Cropped pixel 1 should be white");
+
+                Console.WriteLine("[PASS] Test 14: ImageFilterService (Grayscale & Threshold) & UI verified.");
+            }
+
+            // Test 15: Object Sorting (Title Click, Column Header Click) & LiveSplitter Flicker-Free Check
+            Console.WriteLine("[DEBUG] Starting Test 15: Object Sorting & LiveSplitter checks...");
+            using (var formSort = new MainCropperForm())
+            {
+                var bindingFlags = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+                var splitMainField = typeof(MainCropperForm).GetField("splitMain", bindingFlags);
+                var splitMain = (Controls.LiveSplitContainer)splitMainField!.GetValue(formSort)!;
+
+                // Check splitMain and panels double buffered
+                var doubleBufferedProp = typeof(Control).GetProperty("DoubleBuffered", bindingFlags);
+                bool p1Buffered = (bool)doubleBufferedProp!.GetValue(splitMain.Panel1)!;
+                bool p2Buffered = (bool)doubleBufferedProp.GetValue(splitMain.Panel2)!;
+                if (!p1Buffered || !p2Buffered) throw new Exception("SplitContainer panels are not double buffered");
+
+                // Add 3 sample items in unordered state
+                formSort.SavedRegions.Clear();
+                formSort.SavedRegions.Add(new Models.CropRegionItem { Name = "Charlie", Width = 300, CreatedAt = DateTime.Now.AddMinutes(-10) });
+                formSort.SavedRegions.Add(new Models.CropRegionItem { Name = "Alpha", Width = 100, CreatedAt = DateTime.Now.AddMinutes(-5) });
+                formSort.SavedRegions.Add(new Models.CropRegionItem { Name = "Bravo", Width = 200, CreatedAt = DateTime.Now });
+
+                // Refresh grid
+                var refreshMethod = typeof(MainCropperForm).GetMethod("RefreshSavedGrid", bindingFlags);
+                refreshMethod!.Invoke(formSort, null);
+
+                // Sort by Name (ColName) Ascending
+                var sortMethod = typeof(MainCropperForm).GetMethod("SortSavedRegions", bindingFlags);
+                sortMethod!.Invoke(formSort, new object[] { "ColName" });
+
+                if (formSort.SavedRegions[0].Name != "Alpha" || formSort.SavedRegions[1].Name != "Bravo" || formSort.SavedRegions[2].Name != "Charlie")
+                {
+                    throw new Exception($"Name sorting Ascending failed! Got {formSort.SavedRegions[0].Name}, {formSort.SavedRegions[1].Name}, {formSort.SavedRegions[2].Name}");
+                }
+
+                // Sort by Name again -> Descending
+                sortMethod.Invoke(formSort, new object[] { "ColName" });
+                if (formSort.SavedRegions[0].Name != "Charlie" || formSort.SavedRegions[1].Name != "Bravo" || formSort.SavedRegions[2].Name != "Alpha")
+                {
+                    throw new Exception($"Name sorting Descending failed! Got {formSort.SavedRegions[0].Name}, {formSort.SavedRegions[1].Name}, {formSort.SavedRegions[2].Name}");
+                }
+
+                // Sort by Width (ColW) Ascending
+                sortMethod.Invoke(formSort, new object[] { "ColW" });
+                if (formSort.SavedRegions[0].Width != 100 || formSort.SavedRegions[1].Width != 200 || formSort.SavedRegions[2].Width != 300)
+                {
+                    throw new Exception($"Width sorting failed! Got {formSort.SavedRegions[0].Width}, {formSort.SavedRegions[1].Width}, {formSort.SavedRegions[2].Width}");
+                }
+
+                // Test Title Click sorting
+                var toggleTitleMethod = typeof(MainCropperForm).GetMethod("ToggleTitleSort", bindingFlags);
+                toggleTitleMethod!.Invoke(formSort, null);
+                if (formSort.SavedRegions[0].Name != "Alpha") throw new Exception("Title toggle sort to Alpha failed");
+
+                Console.WriteLine("[PASS] Test 15: Object Sorting (Title Click, Column Header) & Flicker-free Splitters verified.");
+            }
+
+            Console.WriteLine(">>> ALL 15 SELF-DIAGNOSTIC TESTS PASSED SUCCESSFULLY! <<<");
             return 0;
         }
         catch (Exception ex)

@@ -177,6 +177,16 @@ public class CanvasControl : UserControl
         Invalidate();
     }
 
+    /// <summary>
+    /// Updates the currently displayed and cropped bitmap without resetting crop rectangle, zoom, or pan offset.
+    /// Used for real-time filter previews (Grayscale, Threshold binarization).
+    /// </summary>
+    public void SetDisplayImageKeepState(Bitmap? bmp)
+    {
+        _image = bmp;
+        Invalidate();
+    }
+
     public void SetImageWithState(Bitmap? img, Rectangle? cropRect = null, float? zoomFactor = null, PointF? panOffset = null)
     {
         _image = img;

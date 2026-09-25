@@ -28,37 +28,39 @@ Công cụ định vị tọa độ cắt pixel chính xác cao và trích xuấ
   - Lưới pixel (Pixel Grid) tự động xuất hiện khi zoom $\ge 800\%$ giúp căn chỉnh chính xác đến từng pixel đơn lẻ.
 
 ### 3. Panel Phải - Thông số & Điều chỉnh (Properties Sidebar)
-- **Card 1 - Tọa độ & Kích thước**:
+- **Card 0 - Tỉ lệ & Kích thước mẫu**:
+  - Hàng tỉ lệ: `Tự do`, `3:4`, `4:6`, `9:16`, `1:1`, `4:3`, `6:4`, `16:9` (khóa tỉ lệ khung hình trực tiếp khi kéo ngàm).
+  - Hàng độ phân giải màn hình chuẩn: `Toàn bộ`, `1024x768`, `1280x720`, `1366x768`, `1440x900`, `1600x900`, `1920x1080`, `2560x1440`.
+- **Card 1 - Tọa độ & Di chuyển (D-Pad)**:
   - Hộp nhập số `X`, `Y`, `W`, `H` đồng bộ 2 chiều tức thì với thao tác chuột trên canvas.
-  - Hiển thị tỉ lệ khung hình (Aspect Ratio, ví dụ `16:9`, `4:3`, `8:5`).
-- **Card 2 - Di chuyển (D-Pad)**:
-  - 4 nút mũi tên tinh chỉnh (`Left`, `Up`, `Down`, `Right`) với bước nhảy linh hoạt: `1px`, `5px`, `10px`, `50px` (có thể dùng 4 phím mũi tên bàn phím).
+  - 4 nút mũi tên tinh chỉnh (`Left`, `Up`, `Down`, `Right`) với bước nhảy linh hoạt: `1px`, `5px`, `10px`, `50px`.
   - Nút **Căn giữa** (icon Bullseye): Đưa khung crop về chính giữa bức ảnh.
-- **Card 3 - Thay đổi Size nhanh**:
-  - Hàng Rộng (W): `-10`, `-1`, `+1`, `+10`.
-  - Hàng Cao (H): `-10`, `-1`, `+1`, `+10`.
-- **Card 4 - Hành động nổi bật**:
-  - Nút **LƯU TỌA ĐỘ** (icon FloppyDisk): Mở hộp thoại đặt tên vùng cắt (tự động kiểm tra chống trùng lặp).
-  - Nút **CẮT & LƯU ẢNH (`Ctrl + S`)** (icon Crop): Cắt ảnh trực tiếp và lưu ra tệp PNG/JPG/BMP, đồng thời thêm vào danh sách quản lý.
-  - Nút **COPY ẢNH (`Ctrl + C`)** (icon Copy): Sao chép ảnh đã cắt vào Clipboard để dán ngay vào Paint, Zalo, Discord.
+- **Card 2 - Bộ lọc hình ảnh (Image Filters)**:
+  - **Nút tích "Ảnh đen trắng (Grayscale)"**: Chuyển đổi hiển thị ảnh main sang ảnh đen trắng thời gian thực mượt mà.
+  - **Nút tích "Ngưỡng nhị phân (Threshold)"**: Kích hoạt thanh trượt ngưỡng nhị phân (Binarization Slider 0 - 255, mặc định 128).
+  - **Thuật toán so sánh pixel**: Điểm ảnh có độ sáng (luminance) `< ngưỡng` chuyển thành Đen (0, 0, 0), $\ge$ `ngưỡng` chuyển thành Trắng (255, 255, 255).
+  - **Xem & Cắt theo bộ lọc**: Hình ảnh crop lưu ra tệp hoặc copy vào Clipboard phản ánh chính xác hiệu ứng bộ lọc đang chọn mà không phá hủy ảnh gốc.
+- **Thanh nút tác vụ cố định (Fixed Action Bar)**:
+  - Nút **LƯU TỌA ĐỘ** (icon FloppyDisk): Lưu vùng crop vào danh sách Objects.
+  - Nút **CẮT & LƯU ẢNH (`Ctrl + S`)** (icon Crop): Cắt ảnh trực tiếp và lưu ra tệp PNG/JPG/BMP.
+  - Nút **COPY ẢNH (`Ctrl + C`)** (icon Copy): Sao chép ảnh đã cắt vào Clipboard.
 
-### 4. Panel Dưới - Danh sách đã lưu (Tọa độ & Hình ảnh)
-- Chiếm trọn 100% diện tích phần dưới của cửa sổ, giúp hiển thị bảng danh sách rộng rãi, xem được nhiều dòng cùng lúc.
-- **Tiêu đề Header rõ ràng**: `DANH SÁCH ĐÃ LƯU (TỌA ĐỘ & HÌNH ẢNH)` (icon RectangleList) kèm số lượng mục.
+### 4. Panel Dưới - Danh sách Objects đã lưu & Tính năng Sắp xếp
+- Chiếm trọn 100% diện tích phần dưới của cửa sổ, hiển thị bảng danh sách rộng rãi, xem được nhiều dòng cùng lúc.
+- **Sắp xếp linh hoạt theo tiêu đề**:
+  - **Nhấn trực tiếp vào tiêu đề `Objects (N)`**: Tự động chuyển đổi chu kỳ sắp xếp theo Tên (A → Z, Z → A, Mặc định).
+  - **Nhấn vào tiêu đề bất kỳ cột nào trong bảng** (`#`, `Loại`, `Tên vùng / ảnh`, `Tọa độ X`, `Tọa độ Y`, `Rộng (W)`, `Cao (H)`, `Tỉ lệ`, `Thời gian tạo`, `Ghi chú / Đường dẫn`): Tự động sắp xếp tăng dần hoặc giảm dần theo cột tương ứng kèm mũi tên chỉ hướng `▲` / `▼`.
+  - **Nút "Sắp xếp" trên thanh tác vụ**: Menu ngữ cảnh hỗ trợ chọn nhanh các chế độ sắp xếp phổ biến (Tên A-Z, Tên Z-A, Mới nhất, Cũ nhất, Kích thước Lớn - Nhỏ).
 - **Cột Phân loại (`Type`)**:
-  - `Tọa độ`: Badge xanh Cyan kèm biểu tượng vector `LocationDot`.
-  - `Hình ảnh`: Badge xanh ngọc Emerald kèm biểu tượng vector `Image`.
-- **Nút Thao tác trên từng dòng (Bên phải dòng)**:
-  - **Sửa** (icon PenToSquare): Nút nằm bên phải mỗi dòng. Khi rê chuột (hover) sẽ hiện tooltip giải thích. Nhấp vào để đổi tên, cập nhật ghi chú hoặc tọa độ mới.
-  - **Xóa** (icon TrashCan): Nút xóa nằm bên phải mỗi dòng. Khi rê chuột sẽ hiện tooltip xác nhận xóa mục khỏi danh sách.
-- **Tương tác dòng**:
-  - **Nhấp một lần**: Nhảy khung crop trên ảnh gốc về vị trí đó và cập nhật hình xem trước.
-  - **Nhấn đúp (Double-Click)**:
-    - Đối với `Hình ảnh`: Mở cửa sổ **Image Viewer** xem ảnh phóng to, hỗ trợ Zoom, Pan, copy ảnh và mở thư mục chứa tệp.
-    - Đối với `Tọa độ`: Nạp tọa độ lên bảng điều khiển để chỉnh sửa.
-- **Chống đặt tên trùng**: Hệ thống tự động kiểm tra tên khi nhập. Nếu tên bị trùng, cảnh báo đỏ xuất hiện và vô hiệu hóa nút lưu cho tới khi chọn tên khác.
-- **Xuất JSON** (icon FileExport) / **Nhập JSON** (icon FileImport) / **Xóa hết** (icon TrashCan): Lưu trữ và chia sẻ profile cấu hình tọa độ giữa các máy tính.
-- Tự động lưu cấu hình vào tệp `saved_crops.json`.
+  - `Tọa độ`: Biểu tượng vector `LocationDot`.
+  - `Hình ảnh`: Biểu tượng vector `Image`.
+- **Thao tác nhanh**: Sửa tên trực tiếp trên ô bảng (F2 / double click tên), xóa từng mục hoặc xóa hết, xuất và nhập cấu hình JSON, trích xuất gói Export package chuẩn hóa.
+
+### 5. Khung phân chia tương tác (Live Splitter) mượt mà, chống xé hình
+- Khắc phục triệt để hiện tượng giật, nháy và xé hình khi kéo rê thanh ngăn cách:
+  - Tích hợp kỹ thuật vùng nhớ đệm kép `DoubleBuffered` đệ quy toàn bộ các panel và bảng dữ liệu.
+  - Tối ưu hóa thông điệp `WS_CLIPCHILDREN` ngăn chặn vẽ đè nền cha lên các thành phần con.
+  - Loại bỏ hoàn toàn repaint đồng bộ gây nghẽn luồng UI, mang lại trải nghiệm co giãn mượt mà 60 FPS.
 
 ---
 

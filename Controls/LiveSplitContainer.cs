@@ -15,7 +15,30 @@ public class LiveSplitContainer : SplitContainer
     public LiveSplitContainer()
     {
         SetStyle(ControlStyles.OptimizedDoubleBuffer |
-                 ControlStyles.AllPaintingInWmPaint, true);
+                 ControlStyles.AllPaintingInWmPaint |
+                 ControlStyles.ResizeRedraw, true);
+        DoubleBuffered = true;
+
+        EnableDoubleBuffering(Panel1);
+        EnableDoubleBuffering(Panel2);
+    }
+
+    protected override CreateParams CreateParams
+    {
+        get
+        {
+            CreateParams cp = base.CreateParams;
+            cp.Style |= 0x02000000; // WS_CLIPCHILDREN
+            return cp;
+        }
+    }
+
+    private static void EnableDoubleBuffering(Control? c)
+    {
+        if (c == null) return;
+        typeof(Control).GetProperty("DoubleBuffered",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+            ?.SetValue(c, true, null);
     }
 
     protected override void OnMouseDown(MouseEventArgs e)
@@ -45,7 +68,7 @@ public class LiveSplitContainer : SplitContainer
                 if (SplitterDistance != newDist)
                 {
                     SplitterDistance = newDist;
-                    Refresh();
+                    Invalidate(SplitterRectangle);
                 }
             }
             return;

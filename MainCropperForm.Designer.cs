@@ -97,11 +97,21 @@ partial class MainCropperForm
     private Panel pnlPropertiesActions = null!;
     private ToolTip tipActions = null!;
 
+    // Filter controls in properties panel
+    private Panel cardFilters = null!;
+    private CheckBox chkGrayscale = null!;
+    private CheckBox chkThreshold = null!;
+    private Panel pnlThresholdControls = null!;
+    private TrackBar trkThreshold = null!;
+    private Label lblThresholdVal = null!;
+    private Button btnResetThreshold = null!;
+
     // Saved list section
     private Panel pnlSavedSection = null!;
     private Panel pnlSavedHeader = null!;
     private IconPictureBox picSavedIcon = null!;
     private Label lblSavedTitle = null!;
+    private IconButton btnSortObjects = null!;
     private IconButton btnClearAll = null!;
     private IconButton btnExportPackage = null!;
     private IconButton btnExportJson = null!;
@@ -644,10 +654,11 @@ partial class MainCropperForm
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
             ColumnCount = 1,
-            RowCount = 2,
+            RowCount = 3,
             BackColor = Color.Transparent
         };
         tlpCards.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        tlpCards.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         tlpCards.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         tlpCards.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         pnlPropertiesBody.Controls.Add(tlpCards);
@@ -994,6 +1005,148 @@ partial class MainCropperForm
         cardCoords.Controls.Add(rowNudgeControls);
         cardCoords.Controls.Add(tlpCoords);
         cardCoords.Controls.Add(lblCoordsTitle);
+
+        // ---------------------------------------------------------
+        // CARD 2: BỘ LỌC HÌNH ẢNH (Filters: Grayscale & Threshold)
+        // ---------------------------------------------------------
+        cardFilters = new()
+        {
+            Dock = DockStyle.Fill,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            BackColor = Color.FromArgb(40, 44, 54),
+            Padding = new Padding(DpiScale(10), DpiScale(7), DpiScale(10), DpiScale(8)),
+            Margin = Padding.Empty
+        };
+        tlpCards.Controls.Add(cardFilters, 0, 2);
+
+        Label lblFilterTitle = new()
+        {
+            Text = "BỘ LỌC HÌNH ẢNH",
+            UseMnemonic = false,
+            Font = new Font("Segoe UI Bold", 9F),
+            ForeColor = Color.FromArgb(170, 185, 205),
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            Margin = new Padding(0, 0, 0, DpiScale(6))
+        };
+
+        // Checkbox 1: Ảnh đen trắng (Grayscale)
+        chkGrayscale = new CheckBox
+        {
+            Text = "Ảnh đen trắng (Grayscale)",
+            Font = new Font("Segoe UI Semibold", 9F),
+            ForeColor = Color.White,
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            Cursor = Cursors.Hand,
+            FlatStyle = FlatStyle.Flat,
+            Margin = new Padding(0, 0, 0, DpiScale(5))
+        };
+        chkGrayscale.CheckedChanged += (s, e) => OnGrayscaleFilterToggled();
+
+        // Checkbox 2: Ngưỡng nhị phân (Threshold)
+        chkThreshold = new CheckBox
+        {
+            Text = "Ngưỡng nhị phân (Threshold)",
+            Font = new Font("Segoe UI Semibold", 9F),
+            ForeColor = Color.White,
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            Cursor = Cursors.Hand,
+            FlatStyle = FlatStyle.Flat,
+            Margin = new Padding(0, 0, 0, DpiScale(4))
+        };
+        chkThreshold.CheckedChanged += (s, e) => OnThresholdFilterToggled();
+
+        // Threshold Controls Panel
+        pnlThresholdControls = new Panel
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            BackColor = Color.Transparent,
+            Enabled = false,
+            Margin = Padding.Empty,
+            Padding = new Padding(DpiScale(2), DpiScale(2), DpiScale(2), DpiScale(2))
+        };
+
+        TableLayoutPanel tlpThreshHeader = new()
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            ColumnCount = 2,
+            RowCount = 1,
+            BackColor = Color.Transparent,
+            Margin = new Padding(0, 0, 0, DpiScale(2))
+        };
+        tlpThreshHeader.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 55F));
+        tlpThreshHeader.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 45F));
+
+        lblThresholdVal = new Label
+        {
+            Text = "Điểm ngưỡng: 128",
+            Font = new Font("Segoe UI Semibold", 8.5F),
+            ForeColor = Color.FromArgb(180, 210, 240),
+            Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.MiddleLeft,
+            AutoSize = true
+        };
+        tlpThreshHeader.Controls.Add(lblThresholdVal, 0, 0);
+
+        btnResetThreshold = new Button
+        {
+            Text = "Mặc định (128)",
+            Font = new Font("Segoe UI", 8F),
+            ForeColor = Color.FromArgb(200, 215, 230),
+            BackColor = Color.FromArgb(50, 55, 68),
+            FlatStyle = FlatStyle.Flat,
+            Cursor = Cursors.Hand,
+            Dock = DockStyle.Right,
+            Width = DpiScale(88),
+            Height = DpiScale(22)
+        };
+        btnResetThreshold.FlatAppearance.BorderSize = 0;
+        btnResetThreshold.Click += (s, e) =>
+        {
+            trkThreshold.Value = 128;
+            OnThresholdValueChanged();
+        };
+        tlpThreshHeader.Controls.Add(btnResetThreshold, 1, 0);
+
+        trkThreshold = new TrackBar
+        {
+            Dock = DockStyle.Top,
+            Minimum = 0,
+            Maximum = 255,
+            Value = 128,
+            TickFrequency = 32,
+            TickStyle = TickStyle.None,
+            Height = DpiScale(26),
+            BackColor = Color.FromArgb(40, 44, 54),
+            Cursor = Cursors.Hand
+        };
+        trkThreshold.ValueChanged += (s, e) => OnThresholdValueChanged();
+
+        Label lblThresholdHint = new()
+        {
+            Text = "Điểm ảnh < Ngưỡng: Đen | ≥ Ngưỡng: Trắng",
+            Font = new Font("Segoe UI", 7.5F, FontStyle.Italic),
+            ForeColor = Color.FromArgb(140, 155, 175),
+            Dock = DockStyle.Top,
+            TextAlign = ContentAlignment.MiddleCenter,
+            AutoSize = true,
+            Margin = new Padding(0, 0, 0, DpiScale(2))
+        };
+
+        pnlThresholdControls.Controls.Add(lblThresholdHint);
+        pnlThresholdControls.Controls.Add(trkThreshold);
+        pnlThresholdControls.Controls.Add(tlpThreshHeader);
+
+        // Stack controls in cardFilters (reverse order for Dock = Top)
+        cardFilters.Controls.Add(pnlThresholdControls);
+        cardFilters.Controls.Add(chkThreshold);
+        cardFilters.Controls.Add(chkGrayscale);
+        cardFilters.Controls.Add(lblFilterTitle);
     }
 
     private void InitializeSavedSection()
@@ -1025,8 +1178,11 @@ partial class MainCropperForm
             Font = new Font("Segoe UI Semibold", 9F),
             ForeColor = Color.White,
             Location = new Point(picSavedIcon.Right + DpiScale(8), DpiScale(9)),
-            AutoSize = true
+            AutoSize = true,
+            Cursor = Cursors.Hand
         };
+        lblSavedTitle.Click += (s, e) => ToggleTitleSort();
+        tipActions.SetToolTip(lblSavedTitle, "Nhấn vào đây để sắp xếp các item (A-Z / Z-A / Thứ tự ban đầu)");
         pnlSavedHeader.Controls.Add(lblSavedTitle);
 
         FlowLayoutPanel pnlSavedHeaderActions = new()
@@ -1041,6 +1197,10 @@ partial class MainCropperForm
         };
         pnlSavedHeader.Controls.Add(pnlSavedHeaderActions);
         pnlSavedHeaderActions.BringToFront();
+
+        btnSortObjects = CreateListHeaderButton("Sắp xếp", IconChar.ArrowDownAZ, 0);
+        btnSortObjects.Click += (s, e) => ShowSortContextMenu(btnSortObjects);
+        pnlSavedHeaderActions.Controls.Add(btnSortObjects);
 
         btnExportPackage = CreateListHeaderButton("Export", IconChar.BoxesPacking, 0, Color.FromArgb(16, 185, 129), Color.White);
         btnExportPackage.Font = new Font("Segoe UI Bold", 9.5F);
@@ -1100,43 +1260,43 @@ partial class MainCropperForm
         dgvSavedRegions.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(38, 42, 52);
 
         // Columns definition with clear titles and alignment
-        var colIdx = new DataGridViewTextBoxColumn { Name = "ColIndex", HeaderText = "#", Width = DpiScale(42), ReadOnly = true };
+        var colIdx = new DataGridViewTextBoxColumn { Name = "ColIndex", HeaderText = "#", Width = DpiScale(42), ReadOnly = true, SortMode = DataGridViewColumnSortMode.Programmatic };
         colIdx.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
         dgvSavedRegions.Columns.Add(colIdx);
 
-        var colType = new DataGridViewTextBoxColumn { Name = "ColType", HeaderText = "Loại", Width = DpiScale(50), ReadOnly = true };
+        var colType = new DataGridViewTextBoxColumn { Name = "ColType", HeaderText = "Loại", Width = DpiScale(50), ReadOnly = true, SortMode = DataGridViewColumnSortMode.Programmatic };
         colType.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
         dgvSavedRegions.Columns.Add(colType);
 
-        var colName = new DataGridViewTextBoxColumn { Name = "ColName", HeaderText = "Tên vùng / ảnh", Width = DpiScale(175), ReadOnly = false };
+        var colName = new DataGridViewTextBoxColumn { Name = "ColName", HeaderText = "Tên vùng / ảnh", Width = DpiScale(175), ReadOnly = false, SortMode = DataGridViewColumnSortMode.Programmatic };
         colName.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleLeft;
         dgvSavedRegions.Columns.Add(colName);
 
-        var colX = new DataGridViewTextBoxColumn { Name = "ColX", HeaderText = "Tọa độ X", Width = DpiScale(75), ReadOnly = true };
+        var colX = new DataGridViewTextBoxColumn { Name = "ColX", HeaderText = "Tọa độ X", Width = DpiScale(75), ReadOnly = true, SortMode = DataGridViewColumnSortMode.Programmatic };
         colX.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
         dgvSavedRegions.Columns.Add(colX);
 
-        var colY = new DataGridViewTextBoxColumn { Name = "ColY", HeaderText = "Tọa độ Y", Width = DpiScale(75), ReadOnly = true };
+        var colY = new DataGridViewTextBoxColumn { Name = "ColY", HeaderText = "Tọa độ Y", Width = DpiScale(75), ReadOnly = true, SortMode = DataGridViewColumnSortMode.Programmatic };
         colY.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
         dgvSavedRegions.Columns.Add(colY);
 
-        var colW = new DataGridViewTextBoxColumn { Name = "ColW", HeaderText = "Rộng (W)", Width = DpiScale(80), ReadOnly = true };
+        var colW = new DataGridViewTextBoxColumn { Name = "ColW", HeaderText = "Rộng (W)", Width = DpiScale(80), ReadOnly = true, SortMode = DataGridViewColumnSortMode.Programmatic };
         colW.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
         dgvSavedRegions.Columns.Add(colW);
 
-        var colH = new DataGridViewTextBoxColumn { Name = "ColH", HeaderText = "Cao (H)", Width = DpiScale(80), ReadOnly = true };
+        var colH = new DataGridViewTextBoxColumn { Name = "ColH", HeaderText = "Cao (H)", Width = DpiScale(80), ReadOnly = true, SortMode = DataGridViewColumnSortMode.Programmatic };
         colH.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
         dgvSavedRegions.Columns.Add(colH);
 
-        var colRatio = new DataGridViewTextBoxColumn { Name = "ColRatio", HeaderText = "Tỉ lệ", Width = DpiScale(75), ReadOnly = true };
+        var colRatio = new DataGridViewTextBoxColumn { Name = "ColRatio", HeaderText = "Tỉ lệ", Width = DpiScale(75), ReadOnly = true, SortMode = DataGridViewColumnSortMode.Programmatic };
         colRatio.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
         dgvSavedRegions.Columns.Add(colRatio);
 
-        var colCreated = new DataGridViewTextBoxColumn { Name = "ColCreated", HeaderText = "Thời gian tạo", Width = DpiScale(140), ReadOnly = true };
+        var colCreated = new DataGridViewTextBoxColumn { Name = "ColCreated", HeaderText = "Thời gian tạo", Width = DpiScale(140), ReadOnly = true, SortMode = DataGridViewColumnSortMode.Programmatic };
         colCreated.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
         dgvSavedRegions.Columns.Add(colCreated);
 
-        var colNotes = new DataGridViewTextBoxColumn { Name = "ColNotes", HeaderText = "Ghi chú / Đường dẫn", AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill, ReadOnly = true };
+        var colNotes = new DataGridViewTextBoxColumn { Name = "ColNotes", HeaderText = "Ghi chú / Đường dẫn", AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill, ReadOnly = true, SortMode = DataGridViewColumnSortMode.Programmatic };
         colNotes.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleLeft;
         dgvSavedRegions.Columns.Add(colNotes);
 
@@ -1174,6 +1334,7 @@ partial class MainCropperForm
         dgvSavedRegions.CellContentClick += (s, e) => OnSavedGridCellContentClick(e);
         dgvSavedRegions.CellToolTipTextNeeded += (s, e) => OnSavedGridToolTipTextNeeded(e);
         dgvSavedRegions.CellPainting += (s, e) => OnSavedGridCellPainting(e);
+        dgvSavedRegions.ColumnHeaderMouseClick += (s, e) => OnSavedGridColumnHeaderMouseClick(e);
 
         pnlSavedSection.Controls.Add(dgvSavedRegions);
         pnlSavedSection.Controls.Add(pnlSavedHeader);

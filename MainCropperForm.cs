@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Imaging;
@@ -35,18 +35,47 @@ public partial class MainCropperForm : Form
     private readonly System.Windows.Forms.Timer _autoSaveTimer = new();
     private bool _isProjectDirty;
     private MediaItem? _activeMediaItem;
+    private Bitmap? _currentFilteredBitmap;
+    private string _currentSortColumn = "ColCreated";
+    private SortOrder _currentSortOrder = SortOrder.None;
 
     internal DataGridView SavedGrid => dgvSavedRegions;
     internal List<CropRegionItem> SavedRegions => _savedRegions;
     internal void SetImageForTesting(Bitmap bmp, string name)
     {
+        _activeMediaItem = new MediaItem { Bitmap = bmp, Name = name };
         canvas.Image = bmp;
         _currentSourceName = name;
+    }
+
+    protected override CreateParams CreateParams
+    {
+        get
+        {
+            CreateParams cp = base.CreateParams;
+            cp.Style |= 0x02000000; // WS_CLIPCHILDREN
+            return cp;
+        }
+    }
+
+    private static void EnableDoubleBufferingRecursive(Control control)
+    {
+        typeof(Control).GetProperty("DoubleBuffered",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+            ?.SetValue(control, true, null);
+
+        foreach (Control child in control.Controls)
+        {
+            EnableDoubleBufferingRecursive(child);
+        }
     }
 
     public MainCropperForm()
     {
         InitializeComponent();
+
+        DoubleBuffered = true;
+        EnableDoubleBufferingRecursive(this);
 
         int gridIconSize = Math.Max(12, DpiScale(14));
         _editIconBmp = FormsIconHelper.ToBitmap(IconChar.PenToSquare, Color.White, gridIconSize);
@@ -437,6 +466,19 @@ public partial class MainCropperForm : Form
             numH.Maximum = item.Bitmap.Height;
 
             UpdateInputsFromCropRect(canvas.CropRect);
+
+            if (chkGrayscale.Checked || chkThreshold.Checked)
+            {
+                ApplyCurrentFilters();
+            }
+            else
+            {
+                if (_currentFilteredBitmap != null)
+                {
+                    _currentFilteredBitmap.Dispose();
+                    _currentFilteredBitmap = null;
+                }
+            }
 
             if (_currentProject == null)
             {
@@ -2019,6 +2061,14 @@ public partial class MainCropperForm : Form
             {
                 string text = e.FormattedValue.ToString()!;
                 var col = dgvSavedRegions.Columns[e.ColumnIndex];
+                if (col.HeaderCell.SortGlyphDirection == SortOrder.Ascending)
+                {
+                    text += " ▲";
+                }
+                else if (col.HeaderCell.SortGlyphDirection == SortOrder.Descending)
+                {
+                    text += " ▼";
+                }
                 bool isCenter = col.Name is "ColIndex" or "ColType" or "ColX" or "ColY" or "ColW" or "ColH" or "ColRatio" or "ColCreated" or "ColEditBtn" or "ColDeleteBtn";
 
                 StringFormat sf = new()
@@ -2114,6 +2164,201 @@ public partial class MainCropperForm : Form
             e.Handled = true;
         }
     }
+
+    #region Image Filters (Grayscale & Threshold Binarization)
+
+    private void OnGrayscaleFilterToggled()
+    {
+        if (!chkGrayscale.Checked && chkThreshold.Checked)
+        {
+            chkThreshold.Checked = false;
+        }
+        ApplyCurrentFilters();
+    }
+
+    private void OnThresholdFilterToggled()
+    {
+        pnlThresholdControls.Enabled = chkThreshold.Checked;
+        if (chkThreshold.Checked && !chkGrayscale.Checked)
+        {
+            chkGrayscale.Checked = true;
+        }
+        ApplyCurrentFilters();
+    }
+
+    private void OnThresholdValueChanged()
+    {
+        lblThresholdVal.Text = $"Điểm ngưỡng: {trkThreshold.Value}";
+        if (chkThreshold.Checked)
+        {
+            ApplyCurrentFilters();
+        }
+    }
+
+    private void ApplyCurrentFilters()
+    {
+        Bitmap? baseBmp = _activeMediaItem?.Bitmap;
+        if (baseBmp == null && canvas.Image != null && canvas.Image != _currentFilteredBitmap)
+        {
+            baseBmp = canvas.Image;
+        }
+
+        if (baseBmp == null) return;
+
+        bool isGray = chkGrayscale.Checked;
+        bool isThresh = chkThreshold.Checked;
+        int threshold = trkThreshold.Value;
+
+        if (!isGray && !isThresh)
+        {
+            if (_currentFilteredBitmap != null)
+            {
+                _currentFilteredBitmap.Dispose();
+                _currentFilteredBitmap = null;
+            }
+            canvas.SetDisplayImageKeepState(baseBmp);
+        }
+        else
+        {
+            Bitmap? filtered = ImageFilterService.ApplyFilters(baseBmp, isGray, isThresh, threshold);
+            if (filtered != null)
+            {
+                canvas.SetDisplayImageKeepState(filtered);
+                if (_currentFilteredBitmap != null && _currentFilteredBitmap != filtered)
+                {
+                    _currentFilteredBitmap.Dispose();
+                }
+                _currentFilteredBitmap = filtered;
+            }
+        }
+    }
+
+    #endregion
+
+    #region Object Sorting (Column Header Click & Objects Title Click)
+
+    private void OnSavedGridColumnHeaderMouseClick(DataGridViewCellMouseEventArgs e)
+    {
+        if (e.ColumnIndex < 0 || e.ColumnIndex >= dgvSavedRegions.Columns.Count) return;
+        var col = dgvSavedRegions.Columns[e.ColumnIndex];
+        if (col.Name is "ColEditBtn" or "ColDeleteBtn") return;
+
+        SortSavedRegions(col.Name);
+    }
+
+    private void ToggleTitleSort()
+    {
+        if (_currentSortColumn != "ColName")
+        {
+            _currentSortColumn = "ColName";
+            _currentSortOrder = SortOrder.Ascending;
+        }
+        else if (_currentSortOrder == SortOrder.Ascending)
+        {
+            _currentSortOrder = SortOrder.Descending;
+        }
+        else
+        {
+            _currentSortColumn = "ColCreated";
+            _currentSortOrder = SortOrder.Ascending;
+        }
+
+        ApplySortingAndRefresh();
+    }
+
+    private void SortSavedRegions(string columnName)
+    {
+        if (_currentSortColumn == columnName)
+        {
+            _currentSortOrder = (_currentSortOrder == SortOrder.Ascending) ? SortOrder.Descending : SortOrder.Ascending;
+        }
+        else
+        {
+            _currentSortColumn = columnName;
+            _currentSortOrder = SortOrder.Ascending;
+        }
+
+        ApplySortingAndRefresh();
+    }
+
+    private void ApplySortingAndRefresh()
+    {
+        if (_savedRegions.Count > 1)
+        {
+            bool asc = _currentSortOrder == SortOrder.Ascending;
+
+            switch (_currentSortColumn)
+            {
+                case "ColIndex":
+                    _savedRegions.Sort((a, b) => asc ? a.CreatedAt.CompareTo(b.CreatedAt) : b.CreatedAt.CompareTo(a.CreatedAt));
+                    break;
+                case "ColType":
+                    _savedRegions.Sort((a, b) => asc
+                        ? string.Compare(a.TypeDisplay, b.TypeDisplay, StringComparison.CurrentCultureIgnoreCase)
+                        : string.Compare(b.TypeDisplay, a.TypeDisplay, StringComparison.CurrentCultureIgnoreCase));
+                    break;
+                case "ColName":
+                    _savedRegions.Sort((a, b) => asc
+                        ? string.Compare(a.Name, b.Name, StringComparison.CurrentCultureIgnoreCase)
+                        : string.Compare(b.Name, a.Name, StringComparison.CurrentCultureIgnoreCase));
+                    break;
+                case "ColX":
+                    _savedRegions.Sort((a, b) => asc ? a.X.CompareTo(b.X) : b.X.CompareTo(a.X));
+                    break;
+                case "ColY":
+                    _savedRegions.Sort((a, b) => asc ? a.Y.CompareTo(b.Y) : b.Y.CompareTo(a.Y));
+                    break;
+                case "ColW":
+                    _savedRegions.Sort((a, b) => asc ? a.Width.CompareTo(b.Width) : b.Width.CompareTo(a.Width));
+                    break;
+                case "ColH":
+                    _savedRegions.Sort((a, b) => asc ? a.Height.CompareTo(b.Height) : b.Height.CompareTo(a.Height));
+                    break;
+                case "ColRatio":
+                    _savedRegions.Sort((a, b) => asc
+                        ? string.Compare(a.AspectRatioStr, b.AspectRatioStr, StringComparison.Ordinal)
+                        : string.Compare(b.AspectRatioStr, a.AspectRatioStr, StringComparison.Ordinal));
+                    break;
+                case "ColCreated":
+                    _savedRegions.Sort((a, b) => asc ? a.CreatedAt.CompareTo(b.CreatedAt) : b.CreatedAt.CompareTo(a.CreatedAt));
+                    break;
+                case "ColNotes":
+                    _savedRegions.Sort((a, b) => asc
+                        ? string.Compare(a.Notes ?? "", b.Notes ?? "", StringComparison.CurrentCultureIgnoreCase)
+                        : string.Compare(b.Notes ?? "", a.Notes ?? "", StringComparison.CurrentCultureIgnoreCase));
+                    break;
+            }
+        }
+
+        UpdateSortGlyphs(_currentSortColumn);
+        RefreshSavedGrid();
+    }
+
+    private void UpdateSortGlyphs(string activeColName)
+    {
+        foreach (DataGridViewColumn col in dgvSavedRegions.Columns)
+        {
+            if (col.Name is "ColEditBtn" or "ColDeleteBtn") continue;
+            col.HeaderCell.SortGlyphDirection = (col.Name == activeColName) ? _currentSortOrder : SortOrder.None;
+        }
+        dgvSavedRegions.Invalidate();
+    }
+
+    private void ShowSortContextMenu(Control anchor)
+    {
+        ContextMenuStrip menu = new();
+        menu.Items.Add("Tên: A → Z", null, (s, e) => { _currentSortColumn = "ColName"; _currentSortOrder = SortOrder.Ascending; ApplySortingAndRefresh(); });
+        menu.Items.Add("Tên: Z → A", null, (s, e) => { _currentSortColumn = "ColName"; _currentSortOrder = SortOrder.Descending; ApplySortingAndRefresh(); });
+        menu.Items.Add(new ToolStripSeparator());
+        menu.Items.Add("Thời gian: Mới nhất trước", null, (s, e) => { _currentSortColumn = "ColCreated"; _currentSortOrder = SortOrder.Descending; ApplySortingAndRefresh(); });
+        menu.Items.Add("Thời gian: Cũ nhất trước", null, (s, e) => { _currentSortColumn = "ColCreated"; _currentSortOrder = SortOrder.Ascending; ApplySortingAndRefresh(); });
+        menu.Items.Add(new ToolStripSeparator());
+        menu.Items.Add("Chiều rộng: Lớn → Nhỏ", null, (s, e) => { _currentSortColumn = "ColW"; _currentSortOrder = SortOrder.Descending; ApplySortingAndRefresh(); });
+        menu.Items.Add("Chiều cao: Lớn → Nhỏ", null, (s, e) => { _currentSortColumn = "ColH"; _currentSortOrder = SortOrder.Descending; ApplySortingAndRefresh(); });
+        menu.Show(anchor, new Point(0, anchor.Height));
+    }
+
+    #endregion
 
     private void RefreshSavedGrid()
     {
