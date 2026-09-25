@@ -104,7 +104,7 @@ public class NameInputDialog : Form
             Panel pnlChoice = new()
             {
                 Location = new Point(24, currentY),
-                Size = new Size(436, 52),
+                Size = new Size(436, 56),
                 BackColor = Color.FromArgb(40, 44, 54),
                 BorderStyle = BorderStyle.FixedSingle
             };
@@ -112,7 +112,7 @@ public class NameInputDialog : Form
             radOverwrite.Text = $"Lưu đè (Cập nhật '{_originalName}')";
             radOverwrite.Checked = true;
             radOverwrite.ForeColor = Color.White;
-            radOverwrite.Font = new Font("Segoe UI Semibold", 8.5F);
+            radOverwrite.Font = new Font("Segoe UI Semibold", 9.5F);
             radOverwrite.Location = new Point(12, 4);
             radOverwrite.AutoSize = true;
             radOverwrite.Cursor = Cursors.Hand;
@@ -129,8 +129,8 @@ public class NameInputDialog : Form
 
             radSaveAsNew.Text = "Tạo đối tượng mới (Bằng tên mới bên dưới)";
             radSaveAsNew.ForeColor = Color.FromArgb(200, 215, 240);
-            radSaveAsNew.Font = new Font("Segoe UI Semibold", 8.5F);
-            radSaveAsNew.Location = new Point(12, 26);
+            radSaveAsNew.Font = new Font("Segoe UI Semibold", 9.5F);
+            radSaveAsNew.Location = new Point(12, 28);
             radSaveAsNew.AutoSize = true;
             radSaveAsNew.Cursor = Cursors.Hand;
             radSaveAsNew.CheckedChanged += (s, e) =>
@@ -150,7 +150,7 @@ public class NameInputDialog : Form
             pnlChoice.Controls.Add(radSaveAsNew);
 
             Controls.Add(pnlChoice);
-            currentY += 60;
+            currentY += 64;
         }
 
         // Name Label
@@ -178,7 +178,7 @@ public class NameInputDialog : Form
         // Inline Error Label (for duplicate name / empty name warning)
         lblError.Text = "";
         lblError.ForeColor = Color.FromArgb(255, 95, 85);
-        lblError.Font = new Font("Segoe UI", 8.5F, FontStyle.Italic);
+        lblError.Font = new Font("Segoe UI", 9F, FontStyle.Italic);
         lblError.Location = new Point(24, currentY);
         lblError.Size = new Size(436, 18);
         lblError.Visible = false;

@@ -129,6 +129,23 @@ public static class ProjectService
         }
     }
 
+    public static Bitmap? BitmapFromBase64(string? base64)
+    {
+        if (string.IsNullOrWhiteSpace(base64)) return null;
+        try
+        {
+            byte[] bytes = Convert.FromBase64String(base64);
+            using var ms = new MemoryStream(bytes);
+            using var temp = Image.FromStream(ms);
+            return new Bitmap(temp);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Failed to decode bitmap from Base64: {ex.Message}");
+            return null;
+        }
+    }
+
     public static string ImageToBase64(Image image, ImageFormat? format = null)
     {
         try

@@ -83,7 +83,7 @@ public class ProjectManagementDialog : Form
         {
             Text = "Tạo dự án mới, mở file có sẵn hoặc chọn tiếp tục từ lịch sử",
             UseMnemonic = false,
-            Font = new Font("Segoe UI", 8F),
+            Font = new Font("Segoe UI", 9F),
             ForeColor = Color.FromArgb(170, 185, 205),
             Location = new Point(picHeader.Right + DpiScale(10), DpiScale(32)),
             AutoSize = true
@@ -119,7 +119,7 @@ public class ProjectManagementDialog : Form
             BackColor = Color.FromArgb(16, 185, 129),
             ForeColor = Color.White,
             FlatStyle = FlatStyle.Flat,
-            Font = new Font("Segoe UI Bold", 8.5F),
+            Font = new Font("Segoe UI Bold", 9.5F),
             Cursor = Cursors.Hand
         };
         btnCreateNew.FlatAppearance.BorderSize = 0;
@@ -142,7 +142,7 @@ public class ProjectManagementDialog : Form
             BackColor = Color.FromArgb(0, 122, 204),
             ForeColor = Color.White,
             FlatStyle = FlatStyle.Flat,
-            Font = new Font("Segoe UI Semibold", 8.5F),
+            Font = new Font("Segoe UI Semibold", 9.5F),
             Cursor = Cursors.Hand
         };
         btnOpenExisting.FlatAppearance.BorderSize = 0;
@@ -207,7 +207,7 @@ public class ProjectManagementDialog : Form
         {
             Text = "LỊCH SỬ CÁC DỰ ÁN",
             UseMnemonic = false,
-            Font = new Font("Segoe UI Bold", 8.5F),
+            Font = new Font("Segoe UI Bold", 9.5F),
             ForeColor = Color.FromArgb(170, 185, 205),
             Dock = DockStyle.Top,
             AutoSize = true,
@@ -259,7 +259,7 @@ public class ProjectManagementDialog : Form
             return;
         }
 
-        int itemHeight = DpiScale(96);
+        int itemHeight = DpiScale(104);
         int gap = DpiScale(8);
         int currentY = 0;
 
@@ -279,7 +279,7 @@ public class ProjectManagementDialog : Form
             PictureBox picThumb = new()
             {
                 Location = new Point(DpiScale(8), DpiScale(8)),
-                Size = new Size(DpiScale(125), DpiScale(80)),
+                Size = new Size(DpiScale(130), DpiScale(88)),
                 SizeMode = PictureBoxSizeMode.Zoom,
                 BackColor = Color.FromArgb(20, 22, 28)
             };
@@ -296,7 +296,7 @@ public class ProjectManagementDialog : Form
             {
                 Text = string.IsNullOrEmpty(item.Name) ? "Dự án không tên" : item.Name,
                 UseMnemonic = false,
-                Font = new Font("Segoe UI Bold", 9.5F),
+                Font = new Font("Segoe UI Bold", 10F),
                 ForeColor = Color.White,
                 Location = new Point(picThumb.Right + DpiScale(12), DpiScale(10)),
                 AutoSize = true,
@@ -307,11 +307,11 @@ public class ProjectManagementDialog : Form
 
             Label lblMeta = new()
             {
-                Text = $"Cập nhật: {item.LastModified:dd/MM/yyyy HH:mm}   |   {item.RegionCount} vùng tọa độ   |   {item.ImageDimensions}",
+                Text = $"Cập nhật: {item.LastModified:dd/MM/yyyy HH:mm}   |   {item.RegionCount} mục   |   {item.ImageDimensions}",
                 UseMnemonic = false,
-                Font = new Font("Segoe UI", 8F),
+                Font = new Font("Segoe UI", 9F),
                 ForeColor = Color.FromArgb(170, 185, 205),
-                Location = new Point(picThumb.Right + DpiScale(12), DpiScale(36)),
+                Location = new Point(picThumb.Right + DpiScale(12), DpiScale(38)),
                 AutoSize = true
             };
             card.Controls.Add(lblMeta);
@@ -320,11 +320,11 @@ public class ProjectManagementDialog : Form
             {
                 Text = item.FilePath,
                 UseMnemonic = false,
-                Font = new Font("Segoe UI", 7.5F),
+                Font = new Font("Segoe UI", 9F),
                 ForeColor = Color.FromArgb(120, 135, 155),
-                Location = new Point(picThumb.Right + DpiScale(12), DpiScale(58)),
+                Location = new Point(picThumb.Right + DpiScale(12), DpiScale(64)),
                 AutoSize = true,
-                MaximumSize = new Size(DpiScale(320), DpiScale(20))
+                MaximumSize = new Size(DpiScale(320), DpiScale(22))
             };
             card.Controls.Add(lblPath);
 
@@ -339,13 +339,13 @@ public class ProjectManagementDialog : Form
                 TextImageRelation = TextImageRelation.ImageBeforeText,
                 ImageAlign = ContentAlignment.MiddleLeft,
                 TextAlign = ContentAlignment.MiddleCenter,
-                Size = new Size(DpiScale(72), DpiScale(28)),
+                Size = new Size(DpiScale(72), DpiScale(30)),
                 Anchor = AnchorStyles.Top | AnchorStyles.Right,
-                Location = new Point(card.Width - DpiScale(125), DpiScale(34)),
+                Location = new Point(card.Width - DpiScale(125), DpiScale(37)),
                 BackColor = Color.FromArgb(0, 122, 204),
                 ForeColor = Color.White,
                 FlatStyle = FlatStyle.Flat,
-                Font = new Font("Segoe UI Semibold", 8F),
+                Font = new Font("Segoe UI Semibold", 9F),
                 Cursor = Cursors.Hand
             };
             btnOpen.FlatAppearance.BorderSize = 0;
@@ -358,9 +358,9 @@ public class ProjectManagementDialog : Form
                 IconColor = Color.FromArgb(255, 140, 140),
                 IconSize = DpiScale(13),
                 ImageAlign = ContentAlignment.MiddleCenter,
-                Size = new Size(DpiScale(32), DpiScale(28)),
+                Size = new Size(DpiScale(32), DpiScale(30)),
                 Anchor = AnchorStyles.Top | AnchorStyles.Right,
-                Location = new Point(card.Width - DpiScale(44), DpiScale(34)),
+                Location = new Point(card.Width - DpiScale(44), DpiScale(37)),
                 BackColor = Color.FromArgb(70, 40, 48),
                 FlatStyle = FlatStyle.Flat,
                 Cursor = Cursors.Hand

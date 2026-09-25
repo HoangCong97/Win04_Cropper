@@ -28,6 +28,9 @@ public partial class MainCropperForm : Form
     private readonly List<Button> _ratioButtons = [];
     private ProjectData? _currentProject;
     private string? _currentProjectFilePath;
+    private string _currentSourceName = "";
+    private readonly System.Windows.Forms.Timer _autoSaveTimer = new();
+    private bool _isProjectDirty;
 
     internal DataGridView SavedGrid => dgvSavedRegions;
 
@@ -39,7 +42,13 @@ public partial class MainCropperForm : Form
         _editIconBmp = FormsIconHelper.ToBitmap(IconChar.PenToSquare, Color.White, gridIconSize);
         _deleteIconBmp = FormsIconHelper.ToBitmap(IconChar.TrashCan, Color.FromArgb(255, 120, 130), gridIconSize);
         _coordIconBmp = FormsIconHelper.ToBitmap(IconChar.LocationDot, Color.White, gridIconSize);
-        _imageIconBmp = FormsIconHelper.ToBitmap(IconChar.Image, Color.FromArgb(50, 220, 150), gridIconSize);
+        _imageIconBmp = FormsIconHelper.ToBitmap(IconChar.Image, Color.White, gridIconSize);
+
+        // Auto-save setup (every 15 seconds silently if project has changes)
+        _autoSaveTimer.Interval = 15000;
+        _autoSaveTimer.Tick += (s, e) => AutoSaveProjectSilently();
+        _autoSaveTimer.Start();
+        FormClosing += (s, e) => AutoSaveProjectSilently();
 
         // Ratio buttons collection
         _ratioButtons.AddRange([btnRatio1x1, btnRatio3x4, btnRatio4x6, btnRatio9x16, btnRatioFree, btnRatio4x3, btnRatio6x4, btnRatio16x9]);
@@ -141,9 +150,6 @@ public partial class MainCropperForm : Form
             NativeMethods.UnregisterHotKey(this.Handle, HOTKEY_ID_F9);
         }
         catch { }
-
-        // Save regions to file
-        ConfigStorageService.SaveRegions(_savedRegions);
     }
 
     private const int WM_ENTERSIZEMOVE = 0x0231;
@@ -365,10 +371,12 @@ public partial class MainCropperForm : Form
 
     private void SetSourceImage(Bitmap bmp, string sourceName)
     {
+        _currentSourceName = sourceName;
         canvas.Image?.Dispose();
         canvas.Image = bmp;
 
         lblImageInfo.Text = $"Ảnh: {sourceName} ({bmp.Width} × {bmp.Height} px)";
+        canvas.ImageOverlayInfo = lblImageInfo.Text;
 
         // Set max limits for coordinates
         numX.Maximum = Math.Max(0, bmp.Width - 1);
@@ -384,6 +392,8 @@ public partial class MainCropperForm : Form
             _currentProject = new ProjectData { Name = sourceName };
             UpdateAppTitle();
         }
+
+        _isProjectDirty = true;
     }
 
     #endregion
@@ -395,6 +405,7 @@ public partial class MainCropperForm : Form
         if (_isUpdatingInputs) return;
 
         UpdateInputsFromCropRect(rect);
+        _isProjectDirty = true;
     }
 
     private void OnCanvasCursorMoved(Point imgPt, Color? pixelColor)
@@ -695,8 +706,8 @@ public partial class MainCropperForm : Form
             defaultName: defaultName,
             existingNames: _savedRegions.Select(r => r.Name),
             originalName: origName,
-            title: _currentlyEditingItem != null ? $"Lưu / Cập nhật ảnh: {origName}" : "Lưu & Cắt hình ảnh",
-            headerText: _currentlyEditingItem != null ? "Cập nhật hoặc Lưu mới hình ảnh" : "Lưu ảnh cắt vào danh sách",
+            title: _currentlyEditingItem != null ? $"Lưu / Cập nhật ảnh: {origName}" : "Lưu đối tượng ảnh",
+            headerText: _currentlyEditingItem != null ? "Cập nhật hoặc Lưu mới đối tượng ảnh" : "Lưu đối tượng ảnh vào dự án",
             headerIcon: IconChar.Crop);
 
         if (dlg.ShowDialog(this) != DialogResult.OK) return;
@@ -704,92 +715,59 @@ public partial class MainCropperForm : Form
         string chosenName = dlg.RegionName;
         bool isSaveAsNew = dlg.IsSaveAsNew || _currentlyEditingItem == null;
 
-        using SaveFileDialog sfd = new()
-        {
-            Title = "Chọn nơi lưu tệp hình ảnh đã cắt",
-            Filter = "PNG Image (*.png)|*.png|JPEG Image (*.jpg)|*.jpg|Bitmap Image (*.bmp)|*.bmp",
-            FileName = $"{chosenName}.png"
-        };
+        Bitmap? sourceBmp = canvas.Image != null ? new Bitmap(canvas.Image) : null;
+        string? sourceB64 = canvas.Image != null ? ProjectService.ImageToBase64(canvas.Image) : null;
+        string sourceName = !string.IsNullOrEmpty(_currentSourceName) ? _currentSourceName : (_currentProject?.Name ?? "Main capture");
 
-        if (!isSaveAsNew && !string.IsNullOrEmpty(_currentlyEditingItem?.ImagePath))
+        if (!isSaveAsNew && _currentlyEditingItem != null)
         {
-            try
-            {
-                string? dir = Path.GetDirectoryName(_currentlyEditingItem.ImagePath);
-                if (!string.IsNullOrEmpty(dir) && Directory.Exists(dir))
-                {
-                    sfd.InitialDirectory = dir;
-                }
-                sfd.FileName = Path.GetFileName(_currentlyEditingItem.ImagePath);
-            }
-            catch { }
+            // Overwrite existing item
+            _currentlyEditingItem.Name = chosenName;
+            _currentlyEditingItem.X = canvas.CropRect.X;
+            _currentlyEditingItem.Y = canvas.CropRect.Y;
+            _currentlyEditingItem.Width = canvas.CropRect.Width;
+            _currentlyEditingItem.Height = canvas.CropRect.Height;
+            _currentlyEditingItem.Notes = dlg.Notes;
+            _currentlyEditingItem.ItemType = CropItemType.Image;
+            _currentlyEditingItem.SourceBitmap = sourceBmp;
+            _currentlyEditingItem.SourceImageBase64 = sourceB64;
+            _currentlyEditingItem.SourceImageName = sourceName;
+
+            CancelEditing();
+            RefreshSavedGrid();
+
+            MessageBox.Show($"Đã cập nhật object ảnh [{chosenName}] vào dự án!", "Cập nhật thành công", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
-
-        if (sfd.ShowDialog(this) == DialogResult.OK)
+        else
         {
-            try
+            // Add to saved list as an Image item
+            CropRegionItem item = new()
             {
-                ImageFormat format = ImageFormat.Png;
-                string ext = Path.GetExtension(sfd.FileName).ToLowerInvariant();
-                if (ext is ".jpg" or ".jpeg") format = ImageFormat.Jpeg;
-                else if (ext == ".bmp") format = ImageFormat.Bmp;
+                ItemType = CropItemType.Image,
+                Name = chosenName,
+                X = canvas.CropRect.X,
+                Y = canvas.CropRect.Y,
+                Width = canvas.CropRect.Width,
+                Height = canvas.CropRect.Height,
+                Notes = dlg.Notes,
+                CreatedAt = DateTime.Now,
+                SourceBitmap = sourceBmp,
+                SourceImageBase64 = sourceB64,
+                SourceImageName = sourceName
+            };
 
-                cropped.Save(sfd.FileName, format);
+            _savedRegions.Add(item);
+            CancelEditing();
+            RefreshSavedGrid();
 
-                if (!isSaveAsNew && _currentlyEditingItem != null)
-                {
-                    // Overwrite existing item
-                    _currentlyEditingItem.Name = chosenName;
-                    _currentlyEditingItem.X = canvas.CropRect.X;
-                    _currentlyEditingItem.Y = canvas.CropRect.Y;
-                    _currentlyEditingItem.Width = canvas.CropRect.Width;
-                    _currentlyEditingItem.Height = canvas.CropRect.Height;
-                    _currentlyEditingItem.ImagePath = sfd.FileName;
-                    _currentlyEditingItem.Notes = dlg.Notes;
-                    _currentlyEditingItem.ItemType = CropItemType.Image;
-
-                    CancelEditing();
-                    RefreshSavedGrid();
-                    ConfigStorageService.SaveRegions(_savedRegions);
-
-                    MessageBox.Show($"Đã lưu đè hình ảnh [{chosenName}] thành công!", "Cập nhật thành công", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                }
-                else
-                {
-                    // Add to saved list as an Image item
-                    CropRegionItem item = new()
-                    {
-                        ItemType = CropItemType.Image,
-                        Name = chosenName,
-                        X = canvas.CropRect.X,
-                        Y = canvas.CropRect.Y,
-                        Width = canvas.CropRect.Width,
-                        Height = canvas.CropRect.Height,
-                        ImagePath = sfd.FileName,
-                        Notes = dlg.Notes,
-                        CreatedAt = DateTime.Now
-                    };
-
-                    _savedRegions.Add(item);
-                    CancelEditing();
-                    RefreshSavedGrid();
-
-                    // Select newly added row
-                    if (dgvSavedRegions.Rows.Count > 0)
-                    {
-                        dgvSavedRegions.ClearSelection();
-                        dgvSavedRegions.Rows[^1].Selected = true;
-                    }
-
-                    ConfigStorageService.SaveRegions(_savedRegions);
-
-                    MessageBox.Show($"Đã lưu ảnh '{chosenName}' thành công và thêm vào danh sách!", "Thành công", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                }
-            }
-            catch (Exception ex)
+            // Select newly added row
+            if (dgvSavedRegions.Rows.Count > 0)
             {
-                MessageBox.Show($"Lỗi khi lưu ảnh: {ex.Message}", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                dgvSavedRegions.ClearSelection();
+                dgvSavedRegions.Rows[^1].Selected = true;
             }
+
+            MessageBox.Show($"Đã thêm object ảnh [{chosenName}] vào dự án thành công!", "Lưu mềm thành công", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
     }
 
@@ -838,13 +816,17 @@ public partial class MainCropperForm : Form
             defaultName: defaultName,
             existingNames: _savedRegions.Select(r => r.Name),
             originalName: origName,
-            title: _currentlyEditingItem != null ? $"Lưu / Cập nhật tọa độ: {origName}" : "Lưu tọa độ vùng cắt",
-            headerText: _currentlyEditingItem != null ? "Cập nhật hoặc Lưu mới tọa độ" : "Lưu tọa độ vào danh sách",
+            title: _currentlyEditingItem != null ? $"Lưu / Cập nhật tọa độ: {origName}" : "Lưu đối tượng tọa độ",
+            headerText: _currentlyEditingItem != null ? "Cập nhật hoặc Lưu mới tọa độ" : "Lưu đối tượng tọa độ vào dự án",
             headerIcon: IconChar.FloppyDisk);
 
         if (dlg.ShowDialog(this) != DialogResult.OK) return;
 
         bool isSaveAsNew = dlg.IsSaveAsNew || _currentlyEditingItem == null;
+
+        Bitmap? sourceBmp = canvas.Image != null ? new Bitmap(canvas.Image) : null;
+        string? sourceB64 = canvas.Image != null ? ProjectService.ImageToBase64(canvas.Image) : null;
+        string sourceName = !string.IsNullOrEmpty(_currentSourceName) ? _currentSourceName : (_currentProject?.Name ?? "Main capture");
 
         if (!isSaveAsNew && _currentlyEditingItem != null)
         {
@@ -856,12 +838,14 @@ public partial class MainCropperForm : Form
             _currentlyEditingItem.Height = r.Height;
             _currentlyEditingItem.Notes = dlg.Notes;
             _currentlyEditingItem.ItemType = CropItemType.Coordinate;
+            _currentlyEditingItem.SourceBitmap = sourceBmp;
+            _currentlyEditingItem.SourceImageBase64 = sourceB64;
+            _currentlyEditingItem.SourceImageName = sourceName;
 
             string updatedName = _currentlyEditingItem.Name;
             CancelEditing();
             RefreshSavedGrid();
-            ConfigStorageService.SaveRegions(_savedRegions);
-            MessageBox.Show($"Đã lưu đè (cập nhật) thành công tọa độ cho [{updatedName}]!", "Cập nhật thành công", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show($"Đã cập nhật tọa độ [{updatedName}] vào dự án!", "Cập nhật thành công", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
         else
         {
@@ -874,7 +858,10 @@ public partial class MainCropperForm : Form
                 Width = r.Width,
                 Height = r.Height,
                 Notes = dlg.Notes,
-                CreatedAt = DateTime.Now
+                CreatedAt = DateTime.Now,
+                SourceBitmap = sourceBmp,
+                SourceImageBase64 = sourceB64,
+                SourceImageName = sourceName
             };
 
             _savedRegions.Add(item);
@@ -888,8 +875,7 @@ public partial class MainCropperForm : Form
                 dgvSavedRegions.Rows[^1].Selected = true;
             }
 
-            ConfigStorageService.SaveRegions(_savedRegions);
-            MessageBox.Show($"Đã tạo đối tượng tọa độ mới [{item.Name}] thành công!", "Lưu thành công", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show($"Đã thêm object tọa độ [{item.Name}] vào dự án thành công!", "Lưu mềm thành công", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
     }
 
@@ -902,6 +888,16 @@ public partial class MainCropperForm : Form
     private void LoadRegionToEditor(CropRegionItem item)
     {
         _currentlyEditingItem = item;
+
+        // Restore source image if saved with this object
+        if (item.SourceBitmap != null || !string.IsNullOrEmpty(item.SourceImageBase64))
+        {
+            Bitmap? bmpToUse = item.SourceBitmap != null ? new Bitmap(item.SourceBitmap) : ProjectService.BitmapFromBase64(item.SourceImageBase64);
+            if (bmpToUse != null)
+            {
+                SetSourceImage(bmpToUse, item.SourceImageName ?? item.Name);
+            }
+        }
 
         // Apply coordinates to canvas
         Rectangle rect = new(item.X, item.Y, item.Width, item.Height);
@@ -949,7 +945,6 @@ public partial class MainCropperForm : Form
             _savedRegions.RemoveAt(index);
             if (_currentlyEditingItem == item) CancelEditing();
             RefreshSavedGrid();
-            ConfigStorageService.SaveRegions(_savedRegions);
         }
     }
 
@@ -992,9 +987,14 @@ public partial class MainCropperForm : Form
         target.Y = r.Y;
         target.Width = r.Width;
         target.Height = r.Height;
+        if (canvas.Image != null)
+        {
+            target.SourceBitmap = new Bitmap(canvas.Image);
+            target.SourceImageBase64 = ProjectService.ImageToBase64(canvas.Image);
+            target.SourceImageName = !string.IsNullOrEmpty(_currentSourceName) ? _currentSourceName : target.SourceImageName;
+        }
 
         RefreshSavedGrid();
-        ConfigStorageService.SaveRegions(_savedRegions);
         CancelEditing();
 
         MessageBox.Show($"Đã cập nhật tọa độ mới cho [{target.Name}] thành công!", "Cập nhật thành công", MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -1016,7 +1016,6 @@ public partial class MainCropperForm : Form
             _savedRegions.Clear();
             CancelEditing();
             RefreshSavedGrid();
-            ConfigStorageService.SaveRegions(_savedRegions);
         }
     }
 
@@ -1235,9 +1234,15 @@ public partial class MainCropperForm : Form
             var imported = ConfigStorageService.LoadRegions(ofd.FileName);
             if (imported.Count > 0)
             {
+                foreach (var r in imported)
+                {
+                    if (!string.IsNullOrEmpty(r.SourceImageBase64) && r.SourceBitmap == null)
+                    {
+                        r.SourceBitmap = ProjectService.BitmapFromBase64(r.SourceImageBase64);
+                    }
+                }
                 _savedRegions.AddRange(imported);
                 RefreshSavedGrid();
-                ConfigStorageService.SaveRegions(_savedRegions);
                 MessageBox.Show($"Đã nhập {imported.Count} mục mới từ JSON!", "Thành công", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             else
@@ -1255,6 +1260,20 @@ public partial class MainCropperForm : Form
         if (index >= 0 && index < _savedRegions.Count)
         {
             var item = _savedRegions[index];
+
+            if (item.SourceBitmap != null || !string.IsNullOrEmpty(item.SourceImageBase64))
+            {
+                string targetSourceName = item.SourceImageName ?? item.Name;
+                if (!string.Equals(_currentSourceName, targetSourceName, StringComparison.OrdinalIgnoreCase))
+                {
+                    Bitmap? bmpToUse = item.SourceBitmap != null ? new Bitmap(item.SourceBitmap) : ProjectService.BitmapFromBase64(item.SourceImageBase64);
+                    if (bmpToUse != null)
+                    {
+                        SetSourceImage(bmpToUse, targetSourceName);
+                    }
+                }
+            }
+
             Rectangle rect = new(item.X, item.Y, item.Width, item.Height);
 
             // Move canvas crop box to this region
@@ -1275,22 +1294,36 @@ public partial class MainCropperForm : Form
 
         var item = _savedRegions[e.RowIndex];
 
-        if (item.ItemType == CropItemType.Image)
+        // For both Image and Area (Coordinate), open the modal dialog
+        Bitmap? sourceToCrop = item.SourceBitmap ?? canvas.Image;
+        Bitmap? cropped = null;
+        if (sourceToCrop != null)
         {
-            // Open full Image Viewer Dialog
-            using Bitmap? cropped = GetCroppedBitmap();
-            using var viewer = new ImageViewerDialog(
-                item.ImagePath,
-                cropped,
-                item.Name,
-                new Rectangle(item.X, item.Y, item.Width, item.Height));
-            viewer.ShowDialog(this);
+            Rectangle r = new(item.X, item.Y, item.Width, item.Height);
+            r.Intersect(new Rectangle(0, 0, sourceToCrop.Width, sourceToCrop.Height));
+            if (r.Width > 0 && r.Height > 0)
+            {
+                cropped = sourceToCrop.Clone(r, PixelFormat.Format32bppArgb);
+            }
         }
-        else
+
+        using var viewer = new ImageViewerDialog(
+            item,
+            cropped,
+            item.ImagePath);
+
+        viewer.ShowDialog(this);
+
+        if (viewer.RequestedEditInMain)
         {
-            // Load coordinate to editor
             EditRegionItem(e.RowIndex);
         }
+        else if (viewer.HasSavedChanges)
+        {
+            RefreshSavedGrid();
+        }
+
+        cropped?.Dispose();
     }
 
     private void OnSavedGridCellContentClick(DataGridViewCellEventArgs e)
@@ -1347,7 +1380,7 @@ public partial class MainCropperForm : Form
             using SolidBrush headerBg = new(Color.FromArgb(42, 46, 56));
             using Pen borderPen = new(Color.FromArgb(56, 62, 76), 1);
             using SolidBrush textBrush = new(Color.White);
-            using Font font = new("Segoe UI Semibold", 8.5F);
+            using Font font = new("Segoe UI Semibold", 9.5F);
 
             e.Graphics?.FillRectangle(headerBg, rect);
             e.Graphics?.DrawLine(borderPen, rect.Left, rect.Bottom - 1, rect.Right, rect.Bottom - 1);
@@ -1429,42 +1462,24 @@ public partial class MainCropperForm : Form
 
             e.Handled = true;
         }
-        // Custom badge for Type column
+        // Custom render for Type column: Icon-only, NO badge background, NO border
         else if (colName == "ColType")
         {
             e.PaintBackground(e.ClipBounds, true);
             var item = _savedRegions[e.RowIndex];
 
-            Rectangle rect = e.CellBounds;
-            rect.Inflate(-6, -4);
-
             bool isImage = item.ItemType == CropItemType.Image;
-            Color badgeBg = isImage ? Color.FromArgb(20, 75, 55) : Color.FromArgb(45, 52, 68);
-            Color badgeBorder = isImage ? Color.FromArgb(16, 185, 129) : Color.FromArgb(80, 90, 115);
-            Color textCol = Color.White;
             Bitmap iconBmp = isImage ? _imageIconBmp : _coordIconBmp;
-
-            using SolidBrush bg = new(badgeBg);
-            using Pen border = new(badgeBorder, 1);
-            using SolidBrush textBrush = new(textCol);
-            using Font font = new("Segoe UI Semibold", 8F);
-
-            e.Graphics?.FillRectangle(bg, rect);
-            e.Graphics?.DrawRectangle(border, rect);
 
             if (e.Graphics != null)
             {
+                Rectangle rect = e.CellBounds;
                 int iconW = iconBmp.Width;
                 int iconH = iconBmp.Height;
-                string text = item.TypeDisplay;
-                SizeF textSize = e.Graphics.MeasureString(text, font);
-                float totalW = iconW + 5 + textSize.Width;
-                float startX = rect.X + (rect.Width - totalW) / 2f;
+                float startX = rect.X + (rect.Width - iconW) / 2f;
                 float iconY = rect.Y + (rect.Height - iconH) / 2f;
-                float textY = rect.Y + (rect.Height - textSize.Height) / 2f;
 
                 e.Graphics.DrawImage(iconBmp, startX, iconY);
-                e.Graphics.DrawString(text, font, textBrush, startX + iconW + 5, textY);
             }
 
             e.Handled = true;
@@ -1473,6 +1488,7 @@ public partial class MainCropperForm : Form
 
     private void RefreshSavedGrid()
     {
+        _isProjectDirty = true;
         dgvSavedRegions.Rows.Clear();
         for (int i = 0; i < _savedRegions.Count; i++)
         {
@@ -1495,7 +1511,7 @@ public partial class MainCropperForm : Form
             dgvSavedRegions.Rows[rowIndex].Cells["ColDeleteBtn"].ToolTipText = "Xóa mục này khỏi danh sách";
         }
 
-        lblSavedTitle.Text = $"DANH SÁCH ĐÃ LƯU (TỌA ĐỘ & HÌNH ẢNH): {_savedRegions.Count} mục";
+        lblSavedTitle.Text = $"OBJECT: {_savedRegions.Count} mục";
     }
 
     private void LoadSavedRegions()
@@ -1504,10 +1520,18 @@ public partial class MainCropperForm : Form
         _savedRegions.Clear();
         if (list.Count > 0)
         {
+            foreach (var r in list)
+            {
+                if (!string.IsNullOrEmpty(r.SourceImageBase64) && r.SourceBitmap == null)
+                {
+                    r.SourceBitmap = ProjectService.BitmapFromBase64(r.SourceImageBase64);
+                }
+            }
             _savedRegions.AddRange(list);
         }
 
         RefreshSavedGrid();
+        _isProjectDirty = false;
     }
 
     private static string GetRatioStr(int w, int h)
@@ -1578,6 +1602,7 @@ public partial class MainCropperForm : Form
         canvas.Image?.Dispose();
         canvas.Image = null;
         lblImageInfo.Text = "Ảnh: Chưa nạp";
+        canvas.ImageOverlayInfo = null;
         lblCursorInfo.Text = "Chuột: -";
         canvas.SetCropRect(Rectangle.Empty);
         _isUpdatingInputs = true;
@@ -1587,6 +1612,7 @@ public partial class MainCropperForm : Form
         numH.Value = 0;
         _isUpdatingInputs = false;
 
+        _isProjectDirty = false;
         UpdateAppTitle();
         MessageBox.Show($"Đã tạo dự án mới: '{projectName}'!\nBạn có thể nạp ảnh hoặc dán ảnh vào để bắt đầu làm việc.", "Dự án mới", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
@@ -1619,12 +1645,20 @@ public partial class MainCropperForm : Form
                 canvas.Image?.Dispose();
                 canvas.Image = null;
                 lblImageInfo.Text = "Ảnh: Chưa nạp";
+                canvas.ImageOverlayInfo = null;
             }
 
             // Restore saved regions
             _savedRegions.Clear();
             if (proj.SavedRegions != null && proj.SavedRegions.Count > 0)
             {
+                foreach (var r in proj.SavedRegions)
+                {
+                    if (!string.IsNullOrEmpty(r.SourceImageBase64) && r.SourceBitmap == null)
+                    {
+                        r.SourceBitmap = ProjectService.BitmapFromBase64(r.SourceImageBase64);
+                    }
+                }
                 _savedRegions.AddRange(proj.SavedRegions);
             }
             RefreshSavedGrid();
@@ -1638,6 +1672,7 @@ public partial class MainCropperForm : Form
                 UpdateInputsFromCropRect(r);
             }
 
+            _isProjectDirty = false;
             UpdateAppTitle();
             MessageBox.Show($"Đã mở dự án '{proj.Name}' thành công!\nSố vùng tọa độ: {_savedRegions.Count}", "Mở dự án", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
@@ -1685,18 +1720,93 @@ public partial class MainCropperForm : Form
         _currentProject.CropW = crop.Width;
         _currentProject.CropH = crop.Height;
         _currentProject.LockedAspectRatio = canvas.LockedAspectRatio;
+
+        // Ensure all saved regions have their SourceImageBase64 serialized
+        foreach (var r in _savedRegions)
+        {
+            if (r.SourceBitmap != null && string.IsNullOrEmpty(r.SourceImageBase64))
+            {
+                r.SourceImageBase64 = ProjectService.ImageToBase64(r.SourceBitmap);
+            }
+        }
         _currentProject.SavedRegions = new List<CropRegionItem>(_savedRegions);
 
         try
         {
             string savedPath = ProjectService.SaveProject(_currentProject, _currentProjectFilePath);
             _currentProjectFilePath = savedPath;
+            _isProjectDirty = false;
             UpdateAppTitle();
+            tipActions.SetToolTip(btnSaveProject, $"Lưu dự án (Đã lưu lúc {DateTime.Now:HH:mm:ss})");
             MessageBox.Show($"Đã lưu dự án '{_currentProject.Name}' thành công!\nĐường dẫn: {savedPath}", "Lưu dự án thành công", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
         catch (Exception ex)
         {
             MessageBox.Show($"Lỗi khi lưu dự án: {ex.Message}", "Lỗi lưu dự án", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private void AutoSaveProjectSilently()
+    {
+        if (!_isProjectDirty) return;
+        if (canvas.Image == null && _savedRegions.Count == 0) return;
+
+        try
+        {
+            if (_currentProject == null)
+            {
+                string baseName = !string.IsNullOrWhiteSpace(_currentSourceName)
+                    ? _currentSourceName
+                    : $"Dự án_{DateTime.Now:yyyyMMdd_HHmm}";
+                _currentProject = new ProjectData
+                {
+                    Name = baseName,
+                    CreatedAt = DateTime.Now,
+                    LastModified = DateTime.Now
+                };
+            }
+
+            if (canvas.Image != null)
+            {
+                _currentProject.ImageBase64 = ProjectService.ImageToBase64(canvas.Image);
+                _currentProject.ThumbnailBase64 = ProjectService.GenerateThumbnailBase64(canvas.Image);
+                _currentProject.ImageWidth = canvas.Image.Width;
+                _currentProject.ImageHeight = canvas.Image.Height;
+            }
+            else
+            {
+                _currentProject.ImageBase64 = null;
+                _currentProject.ThumbnailBase64 = null;
+                _currentProject.ImageWidth = 0;
+                _currentProject.ImageHeight = 0;
+            }
+
+            Rectangle crop = canvas.CropRect;
+            _currentProject.CropX = crop.X;
+            _currentProject.CropY = crop.Y;
+            _currentProject.CropW = crop.Width;
+            _currentProject.CropH = crop.Height;
+            _currentProject.LockedAspectRatio = canvas.LockedAspectRatio;
+
+            foreach (var r in _savedRegions)
+            {
+                if (r.SourceBitmap != null && string.IsNullOrEmpty(r.SourceImageBase64))
+                {
+                    r.SourceImageBase64 = ProjectService.ImageToBase64(r.SourceBitmap);
+                }
+            }
+            _currentProject.SavedRegions = new List<CropRegionItem>(_savedRegions);
+
+            string savedPath = ProjectService.SaveProject(_currentProject, _currentProjectFilePath);
+            _currentProjectFilePath = savedPath;
+            _isProjectDirty = false;
+
+            UpdateAppTitle();
+            tipActions.SetToolTip(btnSaveProject, $"Lưu dự án (Tự động lưu lúc {DateTime.Now:HH:mm:ss})");
+        }
+        catch
+        {
+            // Silent error suppression for background auto-save
         }
     }
 

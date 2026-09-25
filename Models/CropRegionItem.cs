@@ -1,4 +1,5 @@
 using System;
+using System.Drawing;
 using System.Text.Json.Serialization;
 
 namespace Win04_Cropper.Models;
@@ -31,6 +32,22 @@ public class CropRegionItem
     public string? Notes { get; set; }
 
     public string? ImagePath { get; set; }
+
+    /// <summary>
+    /// Source capture image Base64 data saved with this object
+    /// </summary>
+    public string? SourceImageBase64 { get; set; }
+
+    /// <summary>
+    /// Name or title of the source capture image
+    /// </summary>
+    public string? SourceImageName { get; set; }
+
+    /// <summary>
+    /// In-memory cached bitmap of the source image for fast switching
+    /// </summary>
+    [JsonIgnore]
+    public Bitmap? SourceBitmap { get; set; }
 
     [JsonIgnore]
     public string TypeDisplay => ItemType == CropItemType.Image ? "Hình ảnh" : "Tọa độ";
@@ -78,7 +95,10 @@ public class CropRegionItem
             Height = this.Height,
             CreatedAt = this.CreatedAt,
             Notes = this.Notes,
-            ImagePath = this.ImagePath
+            ImagePath = this.ImagePath,
+            SourceImageBase64 = this.SourceImageBase64,
+            SourceImageName = this.SourceImageName,
+            SourceBitmap = this.SourceBitmap != null ? new Bitmap(this.SourceBitmap) : null
         };
     }
 }

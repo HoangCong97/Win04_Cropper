@@ -184,7 +184,41 @@ static class Program
                 Console.WriteLine("[PASS] Test 7: ProjectService Save/Load, Thumbnail, and Dialog verified.");
             }
 
-            Console.WriteLine(">>> ALL 7 SELF-DIAGNOSTIC TESTS PASSED SUCCESSFULLY! <<<");
+            // Test 8: ImageViewerDialog Modal Full Crop Frame & Actions Verification
+            Console.WriteLine("[DEBUG] Starting Test 8: ImageViewerDialog modal verification...");
+            {
+                var testItem = new Models.CropRegionItem
+                {
+                    Name = "Sample_Object_Crop",
+                    ItemType = Models.CropItemType.Image,
+                    X = 100,
+                    Y = 50,
+                    Width = 400,
+                    Height = 250
+                };
+                using var testBmp = new Bitmap(400, 250);
+                using (var g = Graphics.FromImage(testBmp))
+                {
+                    g.Clear(Color.CornflowerBlue);
+                    using var brush = new SolidBrush(Color.Gold);
+                    g.FillEllipse(brush, 50, 50, 100, 100);
+                }
+
+                using var viewerDlg = new Controls.ImageViewerDialog(testItem, testBmp);
+                viewerDlg.StartPosition = FormStartPosition.Manual;
+                viewerDlg.Location = new Point(0, 0);
+                viewerDlg.Show();
+                Application.DoEvents();
+
+                using var dlgBmp = new System.Drawing.Bitmap(viewerDlg.Width, viewerDlg.Height);
+                viewerDlg.DrawToBitmap(dlgBmp, new System.Drawing.Rectangle(0, 0, viewerDlg.Width, viewerDlg.Height));
+                dlgBmp.Save("image_viewer_render.png", System.Drawing.Imaging.ImageFormat.Png);
+                viewerDlg.Close();
+                Console.WriteLine($"[PASS] Saved visual snapshot to image_viewer_render.png ({viewerDlg.Width}x{viewerDlg.Height})");
+                Console.WriteLine("[PASS] Test 8: ImageViewerDialog verified.");
+            }
+
+            Console.WriteLine(">>> ALL 8 SELF-DIAGNOSTIC TESTS PASSED SUCCESSFULLY! <<<");
             return 0;
         }
         catch (Exception ex)

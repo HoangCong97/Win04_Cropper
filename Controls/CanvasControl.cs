@@ -58,6 +58,22 @@ public class CanvasControl : UserControl
     [System.ComponentModel.Browsable(false)]
     public float? LockedAspectRatio { get; set; } = null;
 
+    private string? _imageOverlayInfo;
+    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+    [System.ComponentModel.Browsable(false)]
+    public string? ImageOverlayInfo
+    {
+        get => _imageOverlayInfo;
+        set
+        {
+            if (_imageOverlayInfo != value)
+            {
+                _imageOverlayInfo = value;
+                Invalidate();
+            }
+        }
+    }
+
     public CanvasControl()
     {
         DoubleBuffered = true;
@@ -655,6 +671,9 @@ public class CanvasControl : UserControl
 
         // Draw CapCut-style Crop Box
         DrawCapCutCropBox(g);
+
+        // Draw Image Info Overlay at bottom-left corner with true GDI+ semi-transparency
+        DrawImageInfoOverlay(g);
     }
 
     private void DrawCheckerBackground(Graphics g)
@@ -783,7 +802,7 @@ public class CanvasControl : UserControl
     private void DrawHudBadge(Graphics g, RectangleF box)
     {
         string badgeText = $"X:{_cropRect.X} Y:{_cropRect.Y}  |  {_cropRect.Width}×{_cropRect.Height} px";
-        using Font font = new("Segoe UI Semibold", 8.5F);
+        using Font font = new("Segoe UI Semibold", 9.5F);
         SizeF size = g.MeasureString(badgeText, font);
 
         float badgeW = size.Width + 14;
@@ -809,6 +828,41 @@ public class CanvasControl : UserControl
             g.DrawPath(border, path);
             g.DrawString(badgeText, font, textBrush, badgeX + 7, badgeY + 3);
         }
+    }
+
+    private void DrawImageInfoOverlay(Graphics g)
+    {
+        if (string.IsNullOrEmpty(_imageOverlayInfo)) return;
+
+        using Font font = new("Segoe UI Semibold", 9.5F); // >= 12px
+        SizeF textSize = g.MeasureString(_imageOverlayInfo, font);
+
+        float padX = 14;
+        float padY = 6;
+        float boxW = textSize.Width + padX * 2;
+        float boxH = textSize.Height + padY * 2;
+        float boxX = 14;
+        float boxY = Height - boxH - 14;
+
+        if (boxY < 0 || boxW <= 0 || boxH <= 0) return;
+
+        RectangleF boxRect = new(boxX, boxY, boxW, boxH);
+
+        // True GDI+ semi-transparent glassmorphism overlay!
+        using (GraphicsPath path = GetRoundedRect(boxRect, 6))
+        {
+            using SolidBrush bgBrush = new(Color.FromArgb(140, 16, 20, 28));
+            g.FillPath(bgBrush, path);
+
+            using Pen borderPen = new(Color.FromArgb(50, 255, 255, 255), 1);
+            g.DrawPath(borderPen, path);
+        }
+
+        using SolidBrush shadowBrush = new(Color.FromArgb(160, 0, 0, 0));
+        using SolidBrush textBrush = new(Color.FromArgb(235, 240, 250));
+
+        g.DrawString(_imageOverlayInfo, font, shadowBrush, boxX + padX + 1, boxY + padY + 1);
+        g.DrawString(_imageOverlayInfo, font, textBrush, boxX + padX, boxY + padY);
     }
 
     private static GraphicsPath GetRoundedRect(RectangleF rect, float radius)

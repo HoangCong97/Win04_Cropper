@@ -12,6 +12,7 @@ partial class MainCropperForm
 
     // Header Controls
     private Panel pnlHeader = null!;
+    private Panel pnlHeaderDivider = null!;
     private IconPictureBox picAppLogo = null!;
     private Label lblAppTitle = null!;
     private IconButton btnProject = null!;
@@ -161,8 +162,29 @@ partial class MainCropperForm
         {
             Dock = DockStyle.Top,
             Height = DpiScale(56),
-            BackColor = Color.FromArgb(42, 46, 56),
+            BackColor = Color.FromArgb(32, 36, 45),
             Padding = Padding.Empty
+        };
+        pnlHeader.Paint += (s, e) =>
+        {
+            var g = e.Graphics;
+            int w = pnlHeader.Width;
+            int h = pnlHeader.Height;
+
+            // Header top subtle highlight
+            using Pen penHighlight = new(Color.FromArgb(35, 255, 255, 255), 1);
+            g.DrawLine(penHighlight, 0, 0, w, 0);
+
+            // Bottom elevation drop-shadow
+            using Pen shadow3 = new(Color.FromArgb(60, 0, 0, 0), 1);
+            using Pen shadow2 = new(Color.FromArgb(120, 0, 0, 0), 1);
+            using Pen shadow1 = new(Color.FromArgb(180, 0, 0, 0), 1);
+            using Pen darkBorder = new(Color.FromArgb(14, 16, 22), 1);
+
+            g.DrawLine(shadow3, 0, h - 4, w, h - 4);
+            g.DrawLine(shadow2, 0, h - 3, w, h - 3);
+            g.DrawLine(shadow1, 0, h - 2, w, h - 2);
+            g.DrawLine(darkBorder, 0, h - 1, w, h - 1);
         };
 
         picAppLogo = new IconPictureBox
@@ -237,15 +259,6 @@ partial class MainCropperForm
         };
         pnlHeader.Controls.Add(pnlHeaderStatus);
 
-        lblImageInfo = new Label
-        {
-            Text = "Ảnh: Chưa nạp",
-            ForeColor = Color.FromArgb(170, 185, 205),
-            AutoSize = true,
-            Margin = new Padding(0, DpiScale(8), DpiScale(14), 0)
-        };
-        pnlHeaderStatus.Controls.Add(lblImageInfo);
-
         btnSaveProject = CreateHeaderButton("Lưu dự án", IconChar.FloppyDisk, Color.FromArgb(16, 185, 129));
         btnSaveProject.Click += (s, e) => SaveCurrentProject();
         pnlHeaderStatus.Controls.Add(btnSaveProject);
@@ -264,8 +277,28 @@ partial class MainCropperForm
             Panel2MinSize = DpiScale(150),
             SplitterDistance = DpiScale(500)
         };
+        pnlHeaderDivider = new Panel
+        {
+            Dock = DockStyle.Top,
+            Height = DpiScale(3),
+            BackColor = Color.FromArgb(16, 18, 24)
+        };
+        pnlHeaderDivider.Paint += (s, e) =>
+        {
+            var g = e.Graphics;
+            int w = pnlHeaderDivider.Width;
+            using Pen p1 = new(Color.FromArgb(10, 12, 16), 1);
+            using Pen p2 = new(Color.FromArgb(20, 23, 30), 1);
+            using Pen p3 = new(Color.FromArgb(28, 32, 42), 1);
+            g.DrawLine(p1, 0, 0, w, 0);
+            g.DrawLine(p2, 0, 1, w, 1);
+            g.DrawLine(p3, 0, 2, w, 2);
+        };
+
         this.Controls.Add(splitMain);
+        this.Controls.Add(pnlHeaderDivider);
         this.Controls.Add(pnlHeader);
+        pnlHeaderDivider.SendToBack();
         pnlHeader.SendToBack();
 
         // -------------------------------------------------------------
@@ -335,7 +368,7 @@ partial class MainCropperForm
         {
             Text = "Chuột: -",
             ForeColor = Color.FromArgb(200, 215, 235),
-            Font = new Font("Segoe UI", 8.5F),
+            Font = new Font("Segoe UI", 9.5F),
             Dock = DockStyle.Right,
             TextAlign = ContentAlignment.MiddleRight,
             AutoSize = true,
@@ -374,7 +407,7 @@ partial class MainCropperForm
         {
             Text = "100%",
             ForeColor = Color.White,
-            Font = new Font("Segoe UI Semibold", 8.5F),
+            Font = new Font("Segoe UI Semibold", 9.5F),
             Size = new Size(DpiScale(50), DpiScale(24)),
             Margin = Padding.Empty,
             TextAlign = ContentAlignment.MiddleCenter
@@ -419,6 +452,10 @@ partial class MainCropperForm
         canvas = new CanvasControl { Dock = DockStyle.Fill };
         pnlCanvasContainer.Controls.Add(canvas);
         pnlCanvasContainer.Controls.Add(pnlCanvasHeader);
+
+        lblImageInfo = new Label { Visible = false };
+        canvas.ImageOverlayInfo = "Chưa nạp ảnh";
+
         splitTop.Panel1.Controls.Add(pnlCanvasContainer);
 
         // Right Panel: Properties & Adjustments (replacing Preview)
@@ -484,7 +521,7 @@ partial class MainCropperForm
             BackColor = Color.FromArgb(70, 40, 48),
             ForeColor = Color.FromArgb(255, 175, 185),
             FlatStyle = FlatStyle.Flat,
-            Font = new Font("Segoe UI Semibold", 8F),
+            Font = new Font("Segoe UI Semibold", 9F),
             Cursor = Cursors.Hand,
             Visible = false
         };
@@ -622,7 +659,7 @@ partial class MainCropperForm
         {
             Text = "TỈ LỆ / KÍCH THƯỚC",
             UseMnemonic = false,
-            Font = new Font("Segoe UI Bold", 8F),
+            Font = new Font("Segoe UI Bold", 9F),
             ForeColor = Color.FromArgb(170, 185, 205),
             Dock = DockStyle.Top,
             AutoSize = true,
@@ -633,7 +670,7 @@ partial class MainCropperForm
         Label lblRatioTitle = new()
         {
             Text = "Tỉ lệ:",
-            Font = new Font("Segoe UI Semibold", 8F),
+            Font = new Font("Segoe UI Semibold", 9F),
             ForeColor = Color.White,
             Dock = DockStyle.Top,
             AutoSize = true,
@@ -695,7 +732,7 @@ partial class MainCropperForm
         Label lblSizeTitle = new()
         {
             Text = "Kích thước (px):",
-            Font = new Font("Segoe UI Semibold", 8F),
+            Font = new Font("Segoe UI Semibold", 9F),
             ForeColor = Color.White,
             Dock = DockStyle.Top,
             AutoSize = true,
@@ -778,7 +815,7 @@ partial class MainCropperForm
         {
             Text = "TỌA ĐỘ & KÍCH THƯỚC (px)",
             UseMnemonic = false,
-            Font = new Font("Segoe UI Bold", 8F),
+            Font = new Font("Segoe UI Bold", 9F),
             ForeColor = Color.FromArgb(170, 185, 205),
             Dock = DockStyle.Top,
             AutoSize = true,
@@ -863,31 +900,31 @@ partial class MainCropperForm
             Padding = new Padding(0, DpiScale(6), 0, 0)
         };
 
-        btnNudgeLeft = CreateToolButton(IconChar.ArrowLeft, 0, 0, DpiScale(30), DpiScale(26));
+        btnNudgeLeft = CreateToolButton(IconChar.ArrowLeft, 0, 0, DpiScale(30), DpiScale(28));
         btnNudgeLeft.Margin = new Padding(0, 0, DpiScale(2), 0);
         btnNudgeLeft.Click += (s, e) => NudgeCrop(-GetNudgeStep(), 0);
         tipActions.SetToolTip(btnNudgeLeft, "Di chuyển sang trái (Mũi tên Trái)");
         rowNudgeControls.Controls.Add(btnNudgeLeft);
 
-        btnNudgeUp = CreateToolButton(IconChar.ArrowUp, 0, 0, DpiScale(30), DpiScale(26));
+        btnNudgeUp = CreateToolButton(IconChar.ArrowUp, 0, 0, DpiScale(30), DpiScale(28));
         btnNudgeUp.Margin = new Padding(0, 0, DpiScale(2), 0);
         btnNudgeUp.Click += (s, e) => NudgeCrop(0, -GetNudgeStep());
         tipActions.SetToolTip(btnNudgeUp, "Di chuyển lên trên (Mũi tên Lên)");
         rowNudgeControls.Controls.Add(btnNudgeUp);
 
-        btnNudgeDown = CreateToolButton(IconChar.ArrowDown, 0, 0, DpiScale(30), DpiScale(26));
+        btnNudgeDown = CreateToolButton(IconChar.ArrowDown, 0, 0, DpiScale(30), DpiScale(28));
         btnNudgeDown.Margin = new Padding(0, 0, DpiScale(2), 0);
         btnNudgeDown.Click += (s, e) => NudgeCrop(0, GetNudgeStep());
         tipActions.SetToolTip(btnNudgeDown, "Di chuyển xuống dưới (Mũi tên Xuống)");
         rowNudgeControls.Controls.Add(btnNudgeDown);
 
-        btnNudgeRight = CreateToolButton(IconChar.ArrowRight, 0, 0, DpiScale(30), DpiScale(26));
+        btnNudgeRight = CreateToolButton(IconChar.ArrowRight, 0, 0, DpiScale(30), DpiScale(28));
         btnNudgeRight.Margin = new Padding(0, 0, DpiScale(4), 0);
         btnNudgeRight.Click += (s, e) => NudgeCrop(GetNudgeStep(), 0);
         tipActions.SetToolTip(btnNudgeRight, "Di chuyển sang phải (Mũi tên Phải)");
         rowNudgeControls.Controls.Add(btnNudgeRight);
 
-        btnCenterBox = CreateCenterButton("Căn giữa", IconChar.Bullseye, 0, 0, DpiScale(78), DpiScale(26));
+        btnCenterBox = CreateCenterButton("Căn giữa", IconChar.Bullseye, 0, 0, DpiScale(90), DpiScale(28));
         btnCenterBox.Margin = new Padding(0, 0, DpiScale(6), 0);
         btnCenterBox.Click += (s, e) => CenterCropBox();
         tipActions.SetToolTip(btnCenterBox, "Căn giữa vùng chọn vào khung ảnh");
@@ -896,7 +933,7 @@ partial class MainCropperForm
         Label lblStep = new()
         {
             Text = "Bước:",
-            Font = new Font("Segoe UI", 8F),
+            Font = new Font("Segoe UI", 9F),
             ForeColor = Color.White,
             AutoSize = true,
             Margin = new Padding(DpiScale(2), DpiScale(5), DpiScale(2), 0)
@@ -909,10 +946,10 @@ partial class MainCropperForm
             DropDownStyle = ComboBoxStyle.DropDownList,
             FlatStyle = FlatStyle.Flat,
             DrawMode = DrawMode.OwnerDrawFixed,
-            ItemHeight = DpiScale(18),
+            ItemHeight = DpiScale(20),
             BackColor = Color.FromArgb(50, 55, 68),
             ForeColor = Color.White,
-            Font = new Font("Segoe UI Semibold", 8F),
+            Font = new Font("Segoe UI Semibold", 9F),
             Margin = new Padding(0, DpiScale(1), 0, 0)
         };
         cboNudgeStep.Items.AddRange(["1px", "5px", "10px", "50px"]);
@@ -941,7 +978,7 @@ partial class MainCropperForm
             Dock = DockStyle.Top,
             Height = DpiScale(38),
             BackColor = Color.FromArgb(42, 46, 56),
-            Padding = new Padding(DpiScale(14), DpiScale(4), DpiScale(14), DpiScale(4))
+            Padding = new Padding(DpiScale(14), 0, 0, 0)
         };
         pnlSavedSection.Controls.Add(pnlSavedHeader);
 
@@ -958,7 +995,7 @@ partial class MainCropperForm
 
         lblSavedTitle = new Label
         {
-            Text = "DANH SÁCH ĐÃ LƯU (TỌA ĐỘ & HÌNH ẢNH): 0 mục",
+            Text = "OBJECT: 0 mục",
             UseMnemonic = false,
             Font = new Font("Segoe UI Bold", 9F),
             ForeColor = Color.White,
@@ -974,12 +1011,14 @@ partial class MainCropperForm
             FlowDirection = FlowDirection.LeftToRight,
             WrapContents = false,
             BackColor = Color.Transparent,
-            Padding = new Padding(0, DpiScale(2), DpiScale(6), DpiScale(2))
+            Margin = Padding.Empty,
+            Padding = new Padding(0, DpiScale(4), 0, DpiScale(4))
         };
         pnlSavedHeader.Controls.Add(pnlSavedHeaderActions);
+        pnlSavedHeaderActions.BringToFront();
 
         btnExportPackage = CreateListHeaderButton("Export", IconChar.BoxesPacking, 0, Color.FromArgb(16, 185, 129), Color.White);
-        btnExportPackage.Font = new Font("Segoe UI Bold", 8.5F);
+        btnExportPackage.Font = new Font("Segoe UI Bold", 9.5F);
         btnExportPackage.Click += (s, e) => ExportPackage();
         pnlSavedHeaderActions.Controls.Add(btnExportPackage);
 
@@ -992,6 +1031,7 @@ partial class MainCropperForm
         pnlSavedHeaderActions.Controls.Add(btnImportJson);
 
         btnClearAll = CreateListHeaderButton("Xóa hết", IconChar.TrashCan, 0, Color.FromArgb(70, 40, 48), Color.FromArgb(255, 160, 160));
+        btnClearAll.Margin = Padding.Empty;
         btnClearAll.Click += (s, e) => ClearAllSavedRegions();
         pnlSavedHeaderActions.Controls.Add(btnClearAll);
 
@@ -1024,7 +1064,7 @@ partial class MainCropperForm
         dgvSavedRegions.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.Single;
         dgvSavedRegions.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(42, 46, 56);
         dgvSavedRegions.ColumnHeadersDefaultCellStyle.ForeColor = Color.White;
-        dgvSavedRegions.ColumnHeadersDefaultCellStyle.Font = new Font("Segoe UI Semibold", 8.5F);
+        dgvSavedRegions.ColumnHeadersDefaultCellStyle.Font = new Font("Segoe UI Semibold", 9.5F);
         dgvSavedRegions.ColumnHeadersDefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
 
         dgvSavedRegions.DefaultCellStyle.BackColor = Color.FromArgb(34, 38, 46);
@@ -1038,7 +1078,7 @@ partial class MainCropperForm
         colIdx.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
         dgvSavedRegions.Columns.Add(colIdx);
 
-        var colType = new DataGridViewTextBoxColumn { Name = "ColType", HeaderText = "Phân loại", Width = DpiScale(105) };
+        var colType = new DataGridViewTextBoxColumn { Name = "ColType", HeaderText = "Loại", Width = DpiScale(50) };
         colType.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
         dgvSavedRegions.Columns.Add(colType);
 
@@ -1131,7 +1171,7 @@ partial class MainCropperForm
             BackColor = backColor ?? Color.FromArgb(50, 55, 68),
             ForeColor = Color.White,
             FlatStyle = FlatStyle.Flat,
-            Font = new Font("Segoe UI Semibold", 8.5F),
+            Font = new Font("Segoe UI Semibold", 9.5F),
             Cursor = Cursors.Hand
         };
         btn.FlatAppearance.BorderSize = 0;
@@ -1145,7 +1185,7 @@ partial class MainCropperForm
             Text = text,
             Location = new Point(x, y),
             AutoSize = true,
-            Font = new Font("Segoe UI Semibold", 8.5F),
+            Font = new Font("Segoe UI Semibold", 9.5F),
             ForeColor = Color.White
         };
     }
@@ -1204,7 +1244,7 @@ partial class MainCropperForm
             BackColor = Color.FromArgb(50, 55, 68),
             ForeColor = Color.White,
             FlatStyle = FlatStyle.Flat,
-            Font = new Font("Segoe UI", 8F),
+            Font = new Font("Segoe UI", 9F),
             Cursor = Cursors.Hand
         };
         btn.FlatAppearance.BorderSize = 0;
@@ -1221,7 +1261,7 @@ partial class MainCropperForm
             BackColor = Color.FromArgb(50, 55, 68),
             ForeColor = Color.White,
             FlatStyle = FlatStyle.Flat,
-            Font = new Font("Segoe UI Semibold", 8F),
+            Font = new Font("Segoe UI Semibold", 9F),
             Cursor = Cursors.Hand
         };
         btn.FlatAppearance.BorderSize = 0;
@@ -1248,7 +1288,7 @@ partial class MainCropperForm
             BackColor = bg ?? Color.FromArgb(50, 55, 68),
             ForeColor = Color.White,
             FlatStyle = FlatStyle.Flat,
-            Font = new Font("Segoe UI Semibold", 8.5F),
+            Font = new Font("Segoe UI Semibold", 9.5F),
             Cursor = Cursors.Hand
         };
         btn.FlatAppearance.BorderSize = 0;
@@ -1267,7 +1307,7 @@ partial class MainCropperForm
             BackColor = Color.FromArgb(50, 55, 68),
             ForeColor = Color.White,
             FlatStyle = FlatStyle.Flat,
-            Font = new Font("Segoe UI Semibold", 7.25F),
+            Font = new Font("Segoe UI Semibold", 9F),
             Cursor = Cursors.Hand,
             UseCompatibleTextRendering = false
         };
