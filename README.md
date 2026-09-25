@@ -27,23 +27,23 @@ Công cụ định vị tọa độ cắt pixel chính xác cao và trích xuấ
   - Thẻ thông số nổi (HUD Badge) hiển thị tọa độ X, Y và Kích thước W, H ngay trên khung crop.
   - Lưới pixel (Pixel Grid) tự động xuất hiện khi zoom $\ge 800\%$ giúp căn chỉnh chính xác đến từng pixel đơn lẻ.
 
-### 3. Panel Phải - Hình xem trước (Live Preview)
-- Tự động phóng to hoặc thu nhỏ (`Auto-fit`) vừa vặn khung xem trước trong khi vẫn bảo toàn tỉ lệ ảnh.
-- Nền caro mờ trong suốt (Checkerboard) chống lóa.
-- Tùy chọn **Pixel sắc nét (Nearest Neighbor)**: Rất quan trọng khi soi các ký tự số nhỏ, icon game pixel, sprite (như chỉ số tài nguyên AOE) không bị mờ nhòe.
-- Thẻ thông số bên dưới: Chiều rộng, Chiều cao, Tỉ lệ khung hình (Aspect Ratio), và Độ thu phóng xem trước (`Fit %`).
-- Nút nhanh: **Cắt & Lưu ảnh** (icon Crop) và **Copy ảnh** (icon Copy) vào clipboard.
+### 3. Panel Phải - Thông số & Điều chỉnh (Properties Sidebar)
+- **Card 1 - Tọa độ & Kích thước**:
+  - Hộp nhập số `X`, `Y`, `W`, `H` đồng bộ 2 chiều tức thì với thao tác chuột trên canvas.
+  - Hiển thị tỉ lệ khung hình (Aspect Ratio, ví dụ `16:9`, `4:3`, `8:5`).
+- **Card 2 - Di chuyển (D-Pad)**:
+  - 4 nút mũi tên tinh chỉnh (`Left`, `Up`, `Down`, `Right`) với bước nhảy linh hoạt: `1px`, `5px`, `10px`, `50px` (có thể dùng 4 phím mũi tên bàn phím).
+  - Nút **Căn giữa** (icon Bullseye): Đưa khung crop về chính giữa bức ảnh.
+- **Card 3 - Thay đổi Size nhanh**:
+  - Hàng Rộng (W): `-10`, `-1`, `+1`, `+10`.
+  - Hàng Cao (H): `-10`, `-1`, `+1`, `+10`.
+- **Card 4 - Hành động nổi bật**:
+  - Nút **LƯU TỌA ĐỘ** (icon FloppyDisk): Mở hộp thoại đặt tên vùng cắt (tự động kiểm tra chống trùng lặp).
+  - Nút **CẮT & LƯU ẢNH (`Ctrl + S`)** (icon Crop): Cắt ảnh trực tiếp và lưu ra tệp PNG/JPG/BMP, đồng thời thêm vào danh sách quản lý.
+  - Nút **COPY ẢNH (`Ctrl + C`)** (icon Copy): Sao chép ảnh đã cắt vào Clipboard để dán ngay vào Paint, Zalo, Discord.
 
-### 4. Panel Dưới - Bảng điều khiển tinh chỉnh
-- Hộp nhập số `X`, `Y`, `Width`, `Height` đồng bộ 2 chiều với thao tác chuột trên canvas.
-- Phím điều hướng tinh chỉnh (Nudge D-Pad): `CaretLeft`, `CaretRight`, `CaretUp`, `CaretDown` với bước nhảy linh hoạt: `1px`, `5px`, `10px`, `50px` (có thể dùng 4 phím mũi tên trên bàn phím).
-- Nút tăng giảm kích thước nhanh: `W-10`, `W-1`, `W+1`, `W+10`, `H-10`, `H-1`, `H+1`, `H+10`.
-- Nút **Căn giữa** (icon Bullseye): Đưa khung crop về chính giữa bức ảnh.
-- Nút **LƯU TỌA ĐỘ** (icon FloppyDisk): Mở hộp thoại đặt tên vùng cắt (tự động kiểm tra chống đặt tên trùng lặp).
-- Nút **CẮT & LƯU ẢNH (`Ctrl + S`)** (icon Crop): Xuất vùng cắt ra tệp ảnh PNG/JPG/BMP, đồng thời tự động lưu mục này vào danh sách quản lý.
-- Nút **COPY ẢNH (`Ctrl + C`)** (icon Copy): Lưu ảnh vào Clipboard để dán vào Paint, Photoshop, Zalo, Discord.
-
-### 5. Phía Dưới Cùng - Danh sách đã lưu (Tọa độ & Hình ảnh)
+### 4. Panel Dưới - Danh sách đã lưu (Tọa độ & Hình ảnh)
+- Chiếm trọn 100% diện tích phần dưới của cửa sổ, giúp hiển thị bảng danh sách rộng rãi, xem được nhiều dòng cùng lúc.
 - **Tiêu đề Header rõ ràng**: `DANH SÁCH ĐÃ LƯU (TỌA ĐỘ & HÌNH ẢNH)` (icon RectangleList) kèm số lượng mục.
 - **Cột Phân loại (`Type`)**:
   - `Tọa độ`: Badge xanh Cyan kèm biểu tượng vector `LocationDot`.

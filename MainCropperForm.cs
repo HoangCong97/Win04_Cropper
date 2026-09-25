@@ -50,11 +50,11 @@ public partial class MainCropperForm : Form
             {
                 if (splitMain.Height > 100)
                 {
-                    splitMain.SplitterDistance = Math.Clamp((int)(splitMain.Height * 0.65), 50, splitMain.Height - 50);
+                    splitMain.SplitterDistance = Math.Clamp((int)(splitMain.Height * 0.62), 50, splitMain.Height - 50);
                 }
                 if (splitTop.Width > 100)
                 {
-                    splitTop.SplitterDistance = Math.Clamp((int)(splitTop.Width * 0.72), 50, splitTop.Width - 50);
+                    splitTop.SplitterDistance = Math.Clamp(splitTop.Width - DpiScale(320), 200, splitTop.Width - 100);
                 }
             }
             catch { }
@@ -332,7 +332,6 @@ public partial class MainCropperForm : Form
 
         // Sync initial crop
         UpdateInputsFromCropRect(canvas.CropRect);
-        preview.UpdateCrop(canvas.Image, canvas.CropRect);
     }
 
     #endregion
@@ -344,7 +343,6 @@ public partial class MainCropperForm : Form
         if (_isUpdatingInputs) return;
 
         UpdateInputsFromCropRect(rect);
-        preview.UpdateCrop(canvas.Image, rect);
     }
 
     private void OnCanvasCursorMoved(Point imgPt, Color? pixelColor)
@@ -397,7 +395,6 @@ public partial class MainCropperForm : Form
 
         Rectangle newRect = new((int)numX.Value, (int)numY.Value, (int)numW.Value, (int)numH.Value);
         canvas.SetCropRect(newRect);
-        preview.UpdateCrop(canvas.Image, newRect);
         lblAspectRatio.Text = $"Tỉ lệ: {GetRatioStr(newRect.Width, newRect.Height)}";
     }
 
@@ -462,9 +459,43 @@ public partial class MainCropperForm : Form
 
     #region Crop Image Export and Save
 
+    public Bitmap? GetCroppedBitmap()
+    {
+        if (canvas.Image == null) return null;
+        Rectangle cropRect = canvas.CropRect;
+        if (cropRect.Width <= 0 || cropRect.Height <= 0) return null;
+
+        try
+        {
+            int imgW = canvas.Image.Width;
+            int imgH = canvas.Image.Height;
+
+            int x = Math.Clamp(cropRect.X, 0, Math.Max(0, imgW - 1));
+            int y = Math.Clamp(cropRect.Y, 0, Math.Max(0, imgH - 1));
+            int w = Math.Clamp(cropRect.Width, 1, imgW - x);
+            int h = Math.Clamp(cropRect.Height, 1, imgH - y);
+
+            Rectangle validRect = new(x, y, w, h);
+            Bitmap cropped = new(w, h, PixelFormat.Format32bppArgb);
+            using (Graphics g = Graphics.FromImage(cropped))
+            {
+                g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.NearestNeighbor;
+                g.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.Half;
+                g.DrawImage(canvas.Image, new Rectangle(0, 0, w, h), validRect, GraphicsUnit.Pixel);
+            }
+            return cropped;
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"GetCroppedBitmap failed: {ex.Message}");
+            return null;
+        }
+    }
+
     private void CropAndSaveImage()
     {
-        if (canvas.Image == null || preview.CroppedBitmap == null)
+        using Bitmap? cropped = GetCroppedBitmap();
+        if (canvas.Image == null || cropped == null)
         {
             MessageBox.Show("Chưa có ảnh hoặc vùng cắt hợp lệ để lưu!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
@@ -517,7 +548,7 @@ public partial class MainCropperForm : Form
                 if (ext is ".jpg" or ".jpeg") format = ImageFormat.Jpeg;
                 else if (ext == ".bmp") format = ImageFormat.Bmp;
 
-                preview.CroppedBitmap.Save(sfd.FileName, format);
+                cropped.Save(sfd.FileName, format);
 
                 if (!isSaveAsNew && _currentlyEditingItem != null)
                 {
@@ -578,7 +609,8 @@ public partial class MainCropperForm : Form
 
     private void CopyCroppedImageToClipboard()
     {
-        if (preview.CroppedBitmap == null)
+        using Bitmap? cropped = GetCroppedBitmap();
+        if (cropped == null)
         {
             MessageBox.Show("Chưa có vùng cắt để copy!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
@@ -586,7 +618,7 @@ public partial class MainCropperForm : Form
 
         try
         {
-            Clipboard.SetImage(preview.CroppedBitmap);
+            Clipboard.SetImage(cropped);
             MessageBox.Show("Đã copy hình ảnh cắt vào Clipboard! (Bạn có thể nhấn Ctrl+V vào Paint, Zalo, Discord...)", "Thành công", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
         catch (Exception ex)
@@ -688,19 +720,14 @@ public partial class MainCropperForm : Form
         // Apply coordinates to canvas
         Rectangle rect = new(item.X, item.Y, item.Width, item.Height);
         canvas.SetCropRect(rect);
-        if (canvas.Image != null)
-        {
-            preview.UpdateCrop(canvas.Image, rect);
-        }
         UpdateInputsFromCropRect(rect);
 
-        // Update UI status banner in controls bar
-        lblCoordSection.Text = $"ĐANG SỬA: [{item.Name.ToUpper()}] ({item.TypeDisplay}) - Thay đổi tọa độ/size rồi bấm Lưu:";
+        // Update UI status banner in properties panel
+        lblCoordSection.Text = $"ĐANG SỬA: [{item.Name.ToUpper()}]";
         lblCoordSection.ForeColor = Color.FromArgb(255, 205, 50); // Gold
         picCoordIcon.IconChar = IconChar.PenToSquare;
         picCoordIcon.IconColor = Color.FromArgb(255, 205, 50);
 
-        btnCancelEdit.Location = new Point(Math.Min(lblCoordSection.Right + 10, pnlControlsBar.Width - 95), 5);
         btnCancelEdit.Visible = true;
 
         // Highlight in grid
@@ -715,9 +742,9 @@ public partial class MainCropperForm : Form
     private void CancelEditing()
     {
         _currentlyEditingItem = null;
-        lblCoordSection.Text = "ĐIỀU CHỈNH TỌA ĐỘ & KÍCH THƯỚC:";
+        lblCoordSection.Text = "THÔNG SỐ & ĐIỀU CHỈNH";
         lblCoordSection.ForeColor = Color.FromArgb(0, 215, 255);
-        picCoordIcon.IconChar = IconChar.VectorSquare;
+        picCoordIcon.IconChar = IconChar.Sliders;
         picCoordIcon.IconColor = Color.FromArgb(0, 215, 255);
         btnCancelEdit.Visible = false;
     }
@@ -1061,9 +1088,10 @@ public partial class MainCropperForm : Form
         if (item.ItemType == CropItemType.Image)
         {
             // Open full Image Viewer Dialog
+            using Bitmap? cropped = GetCroppedBitmap();
             using var viewer = new ImageViewerDialog(
                 item.ImagePath,
-                preview.CroppedBitmap,
+                cropped,
                 item.Name,
                 new Rectangle(item.X, item.Y, item.Width, item.Height));
             viewer.ShowDialog(this);
