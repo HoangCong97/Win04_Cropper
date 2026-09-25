@@ -17,10 +17,10 @@ public partial class MainCropperForm : Form
 {
     private const int HOTKEY_ID_F9 = 9001;
 
-    private static readonly Bitmap _editIconBmp = FormsIconHelper.ToBitmap(IconChar.PenToSquare, Color.FromArgb(0, 200, 240), 13);
-    private static readonly Bitmap _deleteIconBmp = FormsIconHelper.ToBitmap(IconChar.TrashCan, Color.FromArgb(255, 120, 130), 13);
-    private static readonly Bitmap _coordIconBmp = FormsIconHelper.ToBitmap(IconChar.LocationDot, Color.FromArgb(0, 215, 255), 13);
-    private static readonly Bitmap _imageIconBmp = FormsIconHelper.ToBitmap(IconChar.Image, Color.FromArgb(50, 220, 150), 13);
+    private readonly Bitmap _editIconBmp;
+    private readonly Bitmap _deleteIconBmp;
+    private readonly Bitmap _coordIconBmp;
+    private readonly Bitmap _imageIconBmp;
 
     private readonly List<CropRegionItem> _savedRegions = new();
     private bool _isUpdatingInputs;
@@ -31,6 +31,12 @@ public partial class MainCropperForm : Form
     public MainCropperForm()
     {
         InitializeComponent();
+
+        int gridIconSize = Math.Max(12, DpiScale(14));
+        _editIconBmp = FormsIconHelper.ToBitmap(IconChar.PenToSquare, Color.FromArgb(0, 200, 240), gridIconSize);
+        _deleteIconBmp = FormsIconHelper.ToBitmap(IconChar.TrashCan, Color.FromArgb(255, 120, 130), gridIconSize);
+        _coordIconBmp = FormsIconHelper.ToBitmap(IconChar.LocationDot, Color.FromArgb(0, 215, 255), gridIconSize);
+        _imageIconBmp = FormsIconHelper.ToBitmap(IconChar.Image, Color.FromArgb(50, 220, 150), gridIconSize);
 
         // Canvas events
         canvas.CropRectChanged += OnCanvasCropRectChanged;
@@ -59,10 +65,20 @@ public partial class MainCropperForm : Form
     {
         base.OnLoad(e);
 
-        if (File.Exists("app_icon.ico"))
+        try
         {
-            try { this.Icon = new System.Drawing.Icon("app_icon.ico"); } catch { }
+            string appIconPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "app_icon.ico");
+            if (File.Exists(appIconPath))
+            {
+                this.Icon = new System.Drawing.Icon(appIconPath);
+            }
+            else
+            {
+                var exeIcon = System.Drawing.Icon.ExtractAssociatedIcon(Application.ExecutablePath);
+                if (exeIcon != null) this.Icon = exeIcon;
+            }
         }
+        catch { }
 
         // Register Global Hotkey F9
         try
@@ -78,7 +94,7 @@ public partial class MainCropperForm : Form
         LoadSavedRegions();
 
         // Load sample image if present
-        string samplePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "sample_images", "sample_aoe.jpg");
+        string samplePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "sample_images", "sample_image.jpg");
         if (File.Exists(samplePath))
         {
             LoadImageFromPath(samplePath);
@@ -86,7 +102,7 @@ public partial class MainCropperForm : Form
         else
         {
             // Try parent sample_images
-            string parentSample = Path.Combine(Directory.GetCurrentDirectory(), "sample_images", "sample_aoe.jpg");
+            string parentSample = Path.Combine(Directory.GetCurrentDirectory(), "sample_images", "sample_image.jpg");
             if (File.Exists(parentSample))
             {
                 LoadImageFromPath(parentSample);

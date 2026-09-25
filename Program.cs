@@ -18,11 +18,24 @@ static class Program
             Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
             Application.ThreadException += (s, e) =>
             {
+                // Workaround for known .NET Windows Forms bug where SplitContainer.RepaintSplitterRect
+                // throws transient ExternalException (0x80004005) during display session transitions
+                if (e.Exception is System.Runtime.InteropServices.ExternalException &&
+                    e.Exception.StackTrace?.Contains("SplitContainer.RepaintSplitterRect") == true)
+                {
+                    return;
+                }
+
                 File.WriteAllText("thread_crash.log", e.Exception.ToString());
                 MessageBox.Show(e.Exception.ToString(), "Thread Exception", MessageBoxButtons.OK, MessageBoxIcon.Error);
             };
             AppDomain.CurrentDomain.UnhandledException += (s, e) =>
             {
+                if (e.ExceptionObject is System.Runtime.InteropServices.ExternalException ex &&
+                    ex.StackTrace?.Contains("SplitContainer.RepaintSplitterRect") == true)
+                {
+                    return;
+                }
                 File.WriteAllText("domain_crash.log", e.ExceptionObject.ToString());
             };
 
@@ -101,9 +114,22 @@ static class Program
                 if (!grid.ColumnHeadersVisible) throw new Exception("DataGridView ColumnHeadersVisible is false!");
                 if (grid.Height < 50) throw new Exception($"DataGridView height too small: {grid.Height}px");
                 if (grid.Columns.Count < 12) throw new Exception($"Expected 12 columns, got {grid.Columns.Count}");
-                if (grid.Columns["ColEditBtn"].Width > 50) throw new Exception($"ColEditBtn width expected compact <= 50, got {grid.Columns["ColEditBtn"].Width}");
-                if (grid.Columns["ColDeleteBtn"].Width > 50) throw new Exception($"ColDeleteBtn width expected compact <= 50, got {grid.Columns["ColDeleteBtn"].Width}");
+                var colEdit = grid.Columns["ColEditBtn"] ?? throw new Exception("ColEditBtn not found");
+                var colDelete = grid.Columns["ColDeleteBtn"] ?? throw new Exception("ColDeleteBtn not found");
+                if (colEdit.Width > 90) throw new Exception($"ColEditBtn width expected compact <= 90, got {colEdit.Width}");
+                if (colDelete.Width > 90) throw new Exception($"ColDeleteBtn width expected compact <= 90, got {colDelete.Width}");
                 Console.WriteLine($"[PASS] Grid verified: Bounds={grid.Bounds}, Columns={grid.Columns.Count}, HeadersVisible={grid.ColumnHeadersVisible}");
+                try
+                {
+                    using var bmp = new System.Drawing.Bitmap(form.Width, form.Height);
+                    form.DrawToBitmap(bmp, new System.Drawing.Rectangle(0, 0, form.Width, form.Height));
+                    bmp.Save("app_render.png", System.Drawing.Imaging.ImageFormat.Png);
+                    Console.WriteLine($"[PASS] Saved visual snapshot to app_render.png ({form.Width}x{form.Height})");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[WARN] Could not save app_render.png: {ex.Message}");
+                }
                 timer.Stop();
                 timer.Dispose();
                 form.Close();

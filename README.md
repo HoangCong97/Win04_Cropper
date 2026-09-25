@@ -78,13 +78,22 @@ Công cụ định vị tọa độ cắt pixel chính xác cao và trích xuấ
 
 ---
 
-## 🛠️ Hướng dẫn khởi chạy
+## 🛠️ Hướng dẫn cài đặt & khởi chạy
 
-Chạy trực tiếp file `run.bat` hoặc lệnh:
-```bash
-dotnet run
-```
-Để chạy bài kiểm tra tự chẩn đoán hệ thống (Self-test):
+### 1. Cài đặt tự động (Dành cho máy mới clone về)
+Nhấp đúp chuột vào file `setup.bat`. Script sẽ tự động:
+- Kiểm tra xem máy đã có **.NET 9.0 SDK** chưa (nếu chưa, sẽ tự động dùng `winget` để cài đặt).
+- Khôi phục thư viện NuGet và biên dịch dự án (`dotnet build`).
+- Hỏi khởi chạy ứng dụng ngay sau khi biên dịch thành công.
+
+### 2. Khởi chạy thông thường
+- Nhấp đúp file `run.bat` hoặc chạy lệnh:
+  ```bash
+  dotnet run
+  ```
+
+### 3. Bài kiểm tra tự chẩn đoán (Self-test)
+Để chạy bài kiểm tra tự chẩn đoán hệ thống:
 ```bash
 dotnet run -- --test
 ```
