@@ -175,7 +175,13 @@ public static class ExportPackageService
                 if (cropRect.Width > 0 && cropRect.Height > 0)
                 {
                     using var cropped = srcBmp.Clone(cropRect, PixelFormat.Format32bppArgb);
-                    cropped.Save(cropFilePath, ImageFormat.Png);
+                    Bitmap? filteredCrop = null;
+                    if (r.ThresholdEnabled || r.IsGrayscale)
+                    {
+                        filteredCrop = ImageFilterService.ApplyFilters(cropped, r.IsGrayscale, r.ThresholdEnabled, r.ThresholdValue);
+                    }
+                    (filteredCrop ?? cropped).Save(cropFilePath, ImageFormat.Png);
+                    filteredCrop?.Dispose();
                     exportedCrops++;
                 }
             }
@@ -195,7 +201,16 @@ public static class ExportPackageService
                 y = r.Y,
                 width = r.Width,
                 height = r.Height,
-                aspect_ratio = r.AspectRatioStr
+                aspect_ratio = r.AspectRatioStr,
+                is_grayscale = r.IsGrayscale,
+                threshold_enabled = r.ThresholdEnabled,
+                threshold_value = r.ThresholdEnabled ? (int?)r.ThresholdValue : null,
+                filter = new
+                {
+                    grayscale = r.IsGrayscale,
+                    threshold_enabled = r.ThresholdEnabled,
+                    threshold_value = r.ThresholdEnabled ? (int?)r.ThresholdValue : null
+                }
             });
 
             cropSeq++;
@@ -245,7 +260,13 @@ public static class ExportPackageService
                 if (cropRect.Width > 0 && cropRect.Height > 0)
                 {
                     using var cropped = srcBmp.Clone(cropRect, PixelFormat.Format32bppArgb);
-                    cropped.Save(areaFilePath, ImageFormat.Png);
+                    Bitmap? filteredArea = null;
+                    if (r.ThresholdEnabled || r.IsGrayscale)
+                    {
+                        filteredArea = ImageFilterService.ApplyFilters(cropped, r.IsGrayscale, r.ThresholdEnabled, r.ThresholdValue);
+                    }
+                    (filteredArea ?? cropped).Save(areaFilePath, ImageFormat.Png);
+                    filteredArea?.Dispose();
                     areaCropFile = $"crops/{areaFileName}";
                 }
             }
@@ -264,7 +285,16 @@ public static class ExportPackageService
                 width = r.Width,
                 height = r.Height,
                 aspect_ratio = r.AspectRatioStr,
-                crop_file = areaCropFile
+                crop_file = areaCropFile,
+                is_grayscale = r.IsGrayscale,
+                threshold_enabled = r.ThresholdEnabled,
+                threshold_value = r.ThresholdEnabled ? (int?)r.ThresholdValue : null,
+                filter = new
+                {
+                    grayscale = r.IsGrayscale,
+                    threshold_enabled = r.ThresholdEnabled,
+                    threshold_value = r.ThresholdEnabled ? (int?)r.ThresholdValue : null
+                }
             });
 
             areaSeq++;
@@ -326,10 +356,14 @@ public static class ExportPackageService
         sbReadme.AppendLine("- **`areas`**: Danh sách các vùng tọa độ quan tâm (ROI - Region of Interest).");
         sbReadme.AppendLine("- **`crops`**: Danh sách các đối tượng đã được cắt ra tệp ảnh trong thư mục `crops/`.");
         sbReadme.AppendLine();
-        sbReadme.AppendLine("### Hệ tọa độ:");
+        sbReadme.AppendLine("### Hệ tọa độ & Thuộc tính:");
         sbReadme.AppendLine("- Gốc tọa độ `(0, 0)` nằm ở góc trên bên trái (Top-Left) của ảnh nguồn.");
         sbReadme.AppendLine("- `x`, `y`: Tọa độ góc trên bên trái của khung.");
         sbReadme.AppendLine("- `width`, `height`: Kích thước pixel chiều rộng và chiều cao.");
+        sbReadme.AppendLine("- `is_grayscale`: Trạng thái lọc đen trắng (true/false).");
+        sbReadme.AppendLine("- `threshold_enabled`: Trạng thái bật ngưỡng nhị phân (true/false).");
+        sbReadme.AppendLine("- `threshold_value`: Điểm ngưỡng nhị phân [0..255] (null nếu không bật).");
+        sbReadme.AppendLine("- `filter`: Nhóm thông số bộ lọc chi tiết (`grayscale`, `threshold_enabled`, `threshold_value`).");
         sbReadme.AppendLine();
         sbReadme.AppendLine("## 3. Cách đọc dữ liệu bằng Python");
         sbReadme.AppendLine("```python");
@@ -341,7 +375,8 @@ public static class ExportPackageService
         sbReadme.AppendLine("print('Project:', dataset['project_name'])");
         sbReadme.AppendLine("print('Crops count:', len(dataset['crops']))");
         sbReadme.AppendLine("for crop in dataset['crops']:");
-        sbReadme.AppendLine("    print(f\"ID {crop['id']}: {crop['name']} -> {crop['relative_path']} ({crop['width']}x{crop['height']})\")");
+        sbReadme.AppendLine("    thresh_info = f\", Thresh: {crop['threshold_value']}\" if crop.get('threshold_enabled') else \"\"");
+        sbReadme.AppendLine("    print(f\"ID {crop['id']}: {crop['name']} -> {crop['relative_path']} ({crop['width']}x{crop['height']}{thresh_info})\")");
         sbReadme.AppendLine("```");
 
         File.WriteAllText(Path.Combine(exportRoot, "README.md"), sbReadme.ToString(), Encoding.UTF8);

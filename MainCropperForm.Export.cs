@@ -101,6 +101,9 @@ partial class MainCropperForm
             _currentlyEditingItem.SourceBitmap = sourceBmp;
             _currentlyEditingItem.SourceImageBase64 = sourceB64;
             _currentlyEditingItem.SourceImageName = sourceName;
+            _currentlyEditingItem.IsGrayscale = chkGrayscale.Checked;
+            _currentlyEditingItem.ThresholdEnabled = chkThreshold.Checked;
+            _currentlyEditingItem.ThresholdValue = trkThreshold.Value;
 
             CancelEditing();
             RefreshSavedGrid();
@@ -121,7 +124,10 @@ partial class MainCropperForm
                 CreatedAt = DateTime.Now,
                 SourceBitmap = sourceBmp,
                 SourceImageBase64 = sourceB64,
-                SourceImageName = sourceName
+                SourceImageName = sourceName,
+                IsGrayscale = chkGrayscale.Checked,
+                ThresholdEnabled = chkThreshold.Checked,
+                ThresholdValue = trkThreshold.Value
             };
 
             _savedRegions.Add(item);

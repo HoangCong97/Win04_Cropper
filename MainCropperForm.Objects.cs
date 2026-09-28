@@ -82,6 +82,9 @@ partial class MainCropperForm
             _currentlyEditingItem.SourceBitmap = sourceBmp;
             _currentlyEditingItem.SourceImageBase64 = sourceB64;
             _currentlyEditingItem.SourceImageName = sourceName;
+            _currentlyEditingItem.IsGrayscale = chkGrayscale.Checked;
+            _currentlyEditingItem.ThresholdEnabled = chkThreshold.Checked;
+            _currentlyEditingItem.ThresholdValue = trkThreshold.Value;
 
             CancelEditing();
             RefreshSavedGrid();
@@ -101,7 +104,10 @@ partial class MainCropperForm
                 CreatedAt = DateTime.Now,
                 SourceBitmap = sourceBmp,
                 SourceImageBase64 = sourceB64,
-                SourceImageName = sourceName
+                SourceImageName = sourceName,
+                IsGrayscale = chkGrayscale.Checked,
+                ThresholdEnabled = chkThreshold.Checked,
+                ThresholdValue = trkThreshold.Value
             };
 
             _savedRegions.Add(item);
@@ -137,6 +143,16 @@ partial class MainCropperForm
                 SetSourceImage(bmpToUse, item.SourceImageName ?? item.Name);
             }
         }
+
+        // Restore filter settings if stored
+        chkGrayscale.Checked = item.IsGrayscale;
+        chkThreshold.Checked = item.ThresholdEnabled;
+        if (item.ThresholdValue >= trkThreshold.Minimum && item.ThresholdValue <= trkThreshold.Maximum)
+        {
+            trkThreshold.Value = item.ThresholdValue;
+        }
+        lblThresholdVal.Text = $"Điểm ngưỡng: {trkThreshold.Value}";
+        ApplyCurrentFilters();
 
         // Apply coordinates to canvas
         Rectangle rect = new(item.X, item.Y, item.Width, item.Height);

@@ -44,11 +44,16 @@ public static partial class SelfDiagnosticTests
 
         // Test 2: JSON serialization & deserialization
         string tempJson = Path.Combine(Path.GetTempPath(), "cropper_test_" + Guid.NewGuid().ToString("N") + ".json");
+        item.ThresholdEnabled = true;
+        item.ThresholdValue = 150;
         var list = new List<Models.CropRegionItem> { item, new Models.CropRegionItem { Name = "Square", X = 0, Y = 0, Width = 100, Height = 100 } };
         bool saved = Services.ConfigStorageService.SaveRegions(list, tempJson);
         if (!saved) throw new Exception("Failed to save JSON config.");
         var loaded = Services.ConfigStorageService.LoadRegions(tempJson);
-        if (loaded.Count != 2 || loaded[0].Name != "Test1" || loaded[1].Width != 100) throw new Exception("Loaded JSON data mismatch.");
+        if (loaded.Count != 2 || loaded[0].Name != "Test1" || loaded[1].Width != 100 || !loaded[0].ThresholdEnabled || loaded[0].ThresholdValue != 150)
+        {
+            throw new Exception("Loaded JSON data mismatch.");
+        }
         File.Delete(tempJson);
         Console.WriteLine("[PASS] Test 2: JSON Save and Load verified.");
 

@@ -119,7 +119,10 @@ public static partial class SelfDiagnosticTests
                 Y = 200,
                 Width = 100,
                 Height = 100,
-                SourceImageName = "test_background.png"
+                SourceImageName = "test_background.png",
+                IsGrayscale = true,
+                ThresholdEnabled = true,
+                ThresholdValue = 135
             });
 
             string testExportDir = Path.Combine(Path.GetTempPath(), "cropper_ai_export_test_" + Guid.NewGuid().ToString("N"));
@@ -141,9 +144,12 @@ public static partial class SelfDiagnosticTests
             if (!dataJsonContent.Contains("\"crops\"")) throw new Exception("data.json missing 'crops' array");
             if (!dataJsonContent.Contains("Area 1")) throw new Exception("data.json missing Area 1 entry");
             if (!dataJsonContent.Contains("Crop 1")) throw new Exception("data.json missing Crop 1 entry");
+            if (!dataJsonContent.Contains("\"threshold_enabled\": true")) throw new Exception("data.json missing 'threshold_enabled': true");
+            if (!dataJsonContent.Contains("\"threshold_value\": 135")) throw new Exception("data.json missing 'threshold_value': 135");
 
             string readmeContent = File.ReadAllText(Path.Combine(testExportDir, "README.md"));
             if (!readmeContent.Contains("Top-Left")) throw new Exception("README.md missing coordinate origin spec (Top-Left)");
+            if (!readmeContent.Contains("threshold_value")) throw new Exception("README.md missing threshold_value documentation");
 
             var cropFiles = Directory.GetFiles(Path.Combine(testExportDir, "crops"), "*.png");
             if (cropFiles.Length < 1) throw new Exception("Expected at least 1 crop PNG file in crops/");

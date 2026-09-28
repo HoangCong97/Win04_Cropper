@@ -279,11 +279,14 @@ public class ImageViewerDialog : Form
         string resText = _image != null ? $"{_image.Width} × {_image.Height} px" : "0 × 0 px";
         string coordText = _item != null ? $" | Vị trí gốc: X={_item.X}, Y={_item.Y}" : "";
         string typeText = _item != null ? $" | Loại: {_item.TypeDisplay}" : "";
+        string filterText = _item != null && _item.ThresholdEnabled
+            ? $" | Ngưỡng nhị phân: {_item.ThresholdValue}"
+            : (_item != null && _item.IsGrayscale ? " | Bộ lọc: Grayscale" : "");
         string fileText = !string.IsNullOrEmpty(_imagePath) && File.Exists(_imagePath)
             ? $" | Dung lượng: {new FileInfo(_imagePath).Length / 1024.0:F1} KB"
             : "";
 
-        _lblInfo.Text = $"{resText}{coordText}{typeText}{fileText}";
+        _lblInfo.Text = $"{resText}{coordText}{typeText}{filterText}{fileText}";
         _lblInfo.Location = new Point(_lblTitle.Right + 20, 16);
     }
 

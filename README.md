@@ -38,8 +38,8 @@ Công cụ định vị tọa độ cắt pixel chính xác cao và trích xuấ
 - **Card 2 - Bộ lọc hình ảnh (Image Filters)**:
   - **Nút tích "Ảnh đen trắng (Grayscale)"**: Chuyển đổi hiển thị ảnh main sang ảnh đen trắng thời gian thực mượt mà.
   - **Nút tích "Ngưỡng nhị phân (Threshold)"**: Kích hoạt thanh trượt ngưỡng nhị phân (Binarization Slider 0 - 255, mặc định 128).
-  - **Thuật toán so sánh pixel**: Điểm ảnh có độ sáng (luminance) `< ngưỡng` chuyển thành Đen (0, 0, 0), $\ge$ `ngưỡng` chuyển thành Trắng (255, 255, 255).
   - **Xem & Cắt theo bộ lọc**: Hình ảnh crop lưu ra tệp hoặc copy vào Clipboard phản ánh chính xác hiệu ứng bộ lọc đang chọn mà không phá hủy ảnh gốc.
+  - **Lưu trữ & Xuất Metadata Threshold**: Khi lưu đối tượng (Cắt & Lưu ảnh hoặc Lưu tọa độ), giá trị ngưỡng nhị phân và bộ lọc được tự động lưu kèm vào đối tượng. Khi xuất gói dữ liệu (Export Package), tệp `data.json` và `README.md` đi kèm sẽ chứa đầy đủ thông số `is_grayscale`, `threshold_enabled`, `threshold_value`.
 - **Thanh nút tác vụ cố định (Fixed Action Bar)**:
   - Nút **LƯU TỌA ĐỘ** (icon FloppyDisk): Lưu vùng crop vào danh sách Objects.
   - Nút **CẮT & LƯU ẢNH (`Ctrl + S`)** (icon Crop): Cắt ảnh trực tiếp và lưu ra tệp PNG/JPG/BMP.

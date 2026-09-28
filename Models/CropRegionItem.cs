@@ -34,6 +34,21 @@ public class CropRegionItem
     public string? ImagePath { get; set; }
 
     /// <summary>
+    /// Indicates whether grayscale filter was applied to this crop.
+    /// </summary>
+    public bool IsGrayscale { get; set; }
+
+    /// <summary>
+    /// Indicates whether binary thresholding filter was applied to this crop.
+    /// </summary>
+    public bool ThresholdEnabled { get; set; }
+
+    /// <summary>
+    /// The threshold cut-off value [0..255] used for binarization (defaults to 128).
+    /// </summary>
+    public int ThresholdValue { get; set; } = 128;
+
+    /// <summary>
     /// Source capture image Base64 data saved with this object
     /// </summary>
     public string? SourceImageBase64 { get; set; }
@@ -51,6 +66,11 @@ public class CropRegionItem
 
     [JsonIgnore]
     public string TypeDisplay => ItemType == CropItemType.Image ? "Hình ảnh" : "Tọa độ";
+
+    [JsonIgnore]
+    public string FilterDisplay => ThresholdEnabled
+        ? $"Ngưỡng: {ThresholdValue}"
+        : (IsGrayscale ? "Grayscale" : "Gốc");
 
     [JsonIgnore]
     public string CoordinateStr => $"X:{X}, Y:{Y}";
@@ -96,6 +116,9 @@ public class CropRegionItem
             CreatedAt = this.CreatedAt,
             Notes = this.Notes,
             ImagePath = this.ImagePath,
+            IsGrayscale = this.IsGrayscale,
+            ThresholdEnabled = this.ThresholdEnabled,
+            ThresholdValue = this.ThresholdValue,
             SourceImageBase64 = this.SourceImageBase64,
             SourceImageName = this.SourceImageName,
             SourceBitmap = this.SourceBitmap != null ? new Bitmap(this.SourceBitmap) : null

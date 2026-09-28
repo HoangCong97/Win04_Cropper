@@ -177,12 +177,16 @@ partial class MainCropperForm
         {
             e.ToolTipText = "Xóa mục này khỏi danh sách";
         }
-        else if (colName == "ColType")
+        else if (colName == "ColType" || colName == "ColName")
         {
             var item = _savedRegions[e.RowIndex];
-            e.ToolTipText = item.ItemType == CropItemType.Image
+            string filterInfo = item.ThresholdEnabled
+                ? $" [Ngưỡng: {item.ThresholdValue}]"
+                : (item.IsGrayscale ? " [Bộ lọc: Grayscale]" : "");
+
+            e.ToolTipText = (item.ItemType == CropItemType.Image
                 ? "Hình ảnh đã cắt (Nhấp đúp dòng này để mở cửa sổ xem ảnh lớn)"
-                : "Tọa độ vùng cắt (Nhấp để chọn, nhấp đúp để nạp lên sửa)";
+                : "Tọa độ vùng cắt (Nhấp để chọn, nhấp đúp để nạp lên sửa)") + filterInfo;
         }
     }
 
